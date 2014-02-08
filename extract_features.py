@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import sys, os
 import argparse
+import json
 
 def main():
   parser = argparse.ArgumentParser()
@@ -44,12 +45,10 @@ def main():
         dependency['mod'].append(conll[7])
       dependency_file.readline()
       source_line += 1
-      print dependency
-      print a_index, b_index
-      print source
 
-    features = extract(source, a_index, b_index, dependency)        
-    feature_file.write('{}\t{}\n'.format(instance,features))
+    features = extract(source, a_index, b_index, dependency)    
+    json_feat = json.dumps(features)    
+    feature_file.write('{}\t{}\n'.format(instance,json_feat))
     instance += 1
   training.close()
   dependency_file.close()
