@@ -25,7 +25,7 @@ global {
 }
 
 task GizaAlignS2T
-    < corpus=$bitext@
+    < corpus=@
     > alignment
     > output_dir
     :: giza_bin=@
@@ -148,7 +148,17 @@ task ReorderingClassify
 }
 
 task ExtractLeftRightClassifierFeatures
+ :: preodering_home=@
+ :: test=(Test: yes='--test' no='')
+ < training=$reorderings@InducePairwiseReorderings
+ < parses=@
+ < corpus=@
+ > features
+ > responses 
 {
+  $cdec_dir/corpus/cut-corpus.pl -1 > source
+  python $preordering_home/extract_features.py $test -s source -d $parses -t $training -f $features -r $responses
+  rm source
 }
 
 task ExtractReorderingClassifierFeatures
@@ -163,7 +173,11 @@ task TrainReorderingClassifier
 {
 }
 
-plan Full
+plan features {
+  reach ExtractLeftRightClassifierFeatures via (Test: no)
+}
+
+plan full 
 {
   reach Test 
 }
