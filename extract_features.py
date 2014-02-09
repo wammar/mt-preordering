@@ -23,17 +23,19 @@ def main():
   source_line = -1
   source = []
   dependency = dict()
+  dep_line = 0
 
   for line in training:
     label, sent_num, a_index, b_index = line.split('\t')
     if not args.test:
       response_file.write('{}\t{}\n'.format(instance,label))
     sent_num, a_index, b_index = int(sent_num), int(a_index), int(b_index)
-    if sent_num > source_line: 
+    while sent_num > source_line: 
       source = source_file.readline().strip().split()
       dependecy = dict()
       for i in range(len(source)):
         conll = dependency_file.readline().strip().split('\t')
+        print conll
         if i==0:
           dependency['token']=[]
           dependency['pos']=[]
@@ -43,9 +45,11 @@ def main():
         dependency['pos'].append(conll[3])
         dependency['head'].append(int(conll[6])-1)
         dependency['mod'].append(conll[7])
+        dep_line+=1
       dependency_file.readline()
       source_line += 1
-
+    assert(source==dependency['token'])
+    print source_line, dep_line, a_index, b_index
     features = extract(source, a_index, b_index, dependency)    
     json_feat = json.dumps(features)    
     feature_file.write('{}\t{}\n'.format(instance,json_feat))
@@ -59,7 +63,6 @@ def main():
 def extract(source, a_index, b_index, dependency):
   features = dict()
   features['a_token_'+source[a_index]] = 1
-  print 'b_index=',b_index, ', source=', source
   features['b_token_'+source[b_index]] = 1
   features['a_pos_'+dependency['pos'][a_index]] = 1
   features['b_pos_'+dependency['pos'][b_index]] = 1
@@ -78,6 +81,10 @@ def extract(source, a_index, b_index, dependency):
   else:
     if dependency['head'][b_index]==dependency['head'][a_index]:
       features['same_head'] = 1
+    elif dependency['head'][b_index]==a_index:
+      features['a_head_of_b'] = 1
+    elif dependency['head'][a_index]==b_index:
+      features['b_head_of_a'] = 1
     b_parent = dependency['head'][b_index]
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_pos_'+dependency['pos'][b_parent]] = 1
