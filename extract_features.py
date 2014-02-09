@@ -27,33 +27,39 @@ def main():
 
   for line in training:
     label, sent_num, a_index, b_index = line.split('\t')
-    if not args.test:
-      response_file.write('{}\t{}\n'.format(instance,label))
     sent_num, a_index, b_index = int(sent_num), int(a_index), int(b_index)
     while sent_num > source_line: 
       src = source_file.readline().strip()
       source = src.split()
       source_line +=1
       dependecy = dict()
-      for i in range(len(source)):
-        conll = dependency_file.readline().strip().split('\t')
-        if i==0:
-          dependency['token']=[]
-          dependency['pos']=[]
-          dependency['head']=[]
-          dependency['mod']=[]
+      dependency['token']=[]
+      dependency['pos']=[]
+      dependency['head']=[]
+      dependency['mod']=[]
+      #print source_line, dep_line, a_index, b_index, instance
+      parse = dependency_file.readline().strip()
+      while parse:
+        conll = parse.split('\t')
         dependency['token'].append(conll[1])
         dependency['pos'].append(conll[3])
         dependency['head'].append(int(conll[6])-1)
         dependency['mod'].append(conll[7])
-        dep_line+=1
-      dependency_file.readline()
-      dep_line +=1
-    print src
-    for t in dependency['token']:
-      print t,
-    assert(source==dependency['token'])
-    print source_line, dep_line, a_index, b_index
+        dep_line += 1
+        parse = dependency_file.readline().strip()
+
+    if not source==dependency['token']:
+      print source_line, dep_line, a_index, b_index, instance
+      print src
+      for t in dependency['token']:
+        print t,
+      print ''
+      print dependency['token']
+      continue
+
+    if not args.test:
+      response_file.write('{}\t{}\n'.format(instance,label))
+
     features = extract(source, a_index, b_index, dependency)    
     json_feat = json.dumps(features)    
     feature_file.write('{}\t{}\n'.format(instance,json_feat))
