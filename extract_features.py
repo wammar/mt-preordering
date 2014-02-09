@@ -59,6 +59,7 @@ def main():
 def extract(source, a_index, b_index, dependency):
   features = dict()
   features['a_token_'+source[a_index]] = 1
+  print 'b_index=',b_index, ', source=', source
   features['b_token_'+source[b_index]] = 1
   features['a_pos_'+dependency['pos'][a_index]] = 1
   features['b_pos_'+dependency['pos'][b_index]] = 1

@@ -4,6 +4,7 @@ global {
   ducttape_experimental_submitters=enable
   ducttape_experimental_imports=enable
 
+  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp000/"
   preordering_home="/usr0/home/wammar/mt-preordering/"
   parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
@@ -16,8 +17,8 @@ global {
   tgt="en"
 
   sym_heuristic=(SymHeuristic:
-                      grow_diag_final="grow-diag-final"
                       grow_diag_final_and="grow-diag-final-and"
+                      grow_diag_final="grow-diag-final"
                       grow_diag="grow-diag"
                       intersect="intersect"
                       union="union")
@@ -44,55 +45,15 @@ task GizaAlignS2T
   cp $output_dir/model/aligned.srctotgt $alignment
 }
 
-task GizaAlignS2T
-    < corpus=@
-    > alignment
-    > output_dir
-    :: giza_bin=@
-    :: moses_train_script=@
-    :: cores=@
-    :: src=@
-    :: tgt=@
-    :: cdec_dir=@
-  #  :: .submitter=torque_normal .walltime="12:00:00" .cpus=1 .vmem=32g .q=normal 
-{
-
-  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > $corpus.$src
-  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > $corpus.$tgt
-
-  $moses_train_script --first-step 1 --last-step 3 --parallel --root-dir $output_dir --corpus $corpus --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$cores --alignment srctotgt 
-  cp $output_dir/model/aligned.srctotgt $alignment
-}
-
 task Symmetrize
     < s2tAlignment=(Aligner:
                       giza=$alignment@GizaAlignS2T
-                      fast=$alignment@FastAlignS2T
-                      autoencoder=$alignment@AutoencoderAlignS2T
                       giza_none=$alignment@GizaAlignS2T
-                      none_giza=$alignment@GizaAlignT2S
-                      fast_none=$alignment@FastAlignS2T
-                      none_fast=$alignment@FastAlignT2S
-                      autoencoder_none=$alignment@AutoencoderAlignS2T
-                      none_autoencoder=$alignment@AutoencoderAlignT2S
-                      autoencoder_giza=$alignment@AutoencoderAlignS2T
-                      autoencoder_fast=$alignment@AutoencoderAlignS2T
-                      fast_autoencoder=$alignment@FastAlignS2T
-                      giza_autoencoder=$alignment@GizaAlignS2T)
+                      none_giza=$alignment@GizaAlignT2S)
     < t2sAlignment=(Aligner:
                       giza=$alignment@GizaAlignT2S
-                      fast=$alignment@FastAlignT2S
-                      autoencoder=$alignment@AutoencoderAlignT2S
                       giza_none=$alignment@GizaAlignS2T
-                      none_giza=$alignment@GizaAlignT2S
-                      fast_none=$alignment@FastAlignS2T
-                      none_fast=$alignment@FastAlignT2S
-                      autoencoder_none=$alignment@AutoencoderAlignS2T
-                      none_autoencoder=$alignment@AutoencoderAlignT2S
-                      autoencoder_giza=$alignment@GizaAlignT2S
-                      autoencoder_fast=$alignment@FastAlignT2S
-                      fast_autoencoder=$alignment@AutoencoderAlignT2S
-                      giza_autoencoder=$alignment@AutoencoderAlignT2S)
+                      none_giza=$alignment@GizaAlignT2S)
     > alignment
     :: sym_heuristic=@
     :: cdec_dir=@
@@ -148,36 +109,29 @@ task ReorderingClassify
 }
 
 task ExtractLeftRightClassifierFeatures
- :: preodering_home=@
+ :: preordering_home=@
  :: test=(Test: yes='--test' no='')
- < training=$reorderings@InducePairwiseReorderings
+ :: cdec_dir=@
+ < training=$reorderings@InducePairwiseReordering
  < parses=@
  < corpus=@
  > features
  > responses 
 {
-  $cdec_dir/corpus/cut-corpus.pl -1 > source
+  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
   python $preordering_home/extract_features.py $test -s source -d $parses -t $training -f $features -r $responses
   rm source
-}
-
-task ExtractReorderingClassifierFeatures
-{
 }
 
 task TrainLeftRightClassifier
 {
 }
 
-task TrainReorderingClassifier
-{
-}
-
 plan features {
-  reach ExtractLeftRightClassifierFeatures via (Test: no)
+  reach ExtractLeftRightClassifierFeatures via (Test: no) * (Aligner: giza)
 }
 
 plan full 
 {
-  reach Test 
+  reach Test via (Aligner: giza) 
 }
