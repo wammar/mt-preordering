@@ -116,10 +116,11 @@ task ExtractLeftRightClassifierFeatures
  < parses=@
  < corpus=@
  > features
- > responses 
+ > responses
+ > log 
 {
   $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
-  python $preordering_home/extract_features.py $test -s source -d $parses -t $training -f $features -r $responses
+  python $preordering_home/extract_features.py $test -s source -d $parses -t $training -f $features -r $responses > $log
   rm source
 }
 

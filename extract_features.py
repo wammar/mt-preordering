@@ -31,11 +31,12 @@ def main():
       response_file.write('{}\t{}\n'.format(instance,label))
     sent_num, a_index, b_index = int(sent_num), int(a_index), int(b_index)
     while sent_num > source_line: 
-      source = source_file.readline().strip().split()
+      src = source_file.readline().strip()
+      source = src.split()
+      source_line +=1
       dependecy = dict()
       for i in range(len(source)):
         conll = dependency_file.readline().strip().split('\t')
-        print conll
         if i==0:
           dependency['token']=[]
           dependency['pos']=[]
@@ -47,7 +48,10 @@ def main():
         dependency['mod'].append(conll[7])
         dep_line+=1
       dependency_file.readline()
-      source_line += 1
+      dep_line +=1
+    print src
+    for t in dependency['token']:
+      print t,
     assert(source==dependency['token'])
     print source_line, dep_line, a_index, b_index
     features = extract(source, a_index, b_index, dependency)    
