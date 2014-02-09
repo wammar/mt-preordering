@@ -12,6 +12,7 @@ global {
   moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
   mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
   cdec_dir="/home/wammar/cdec/"
+  creg_bin="./creg/bin/gcc-4.7/release/threading-multi/creg"
   cores=16
   src="hi"
   tgt="en"
@@ -125,11 +126,15 @@ task ExtractLeftRightClassifierFeatures
 }
 
 task TrainLeftRightClassifier
+ < features=$features@ExtractLeftRightClassifierFeatures
+ < responses=$responses@ExtractLeftRightClassifierFeatures
+ > model
 {
+  /usr0/home/wammar/creg/bin/gcc-4.7/release/threading-multi/creg -x $features -y $responses  --l1 1000
 }
 
 plan features {
-  reach ExtractLeftRightClassifierFeatures via (Test: no) * (Aligner: giza)
+  reach TrainLeftRightClassifier via (Test: no) * (Aligner: giza)
 }
 
 plan full 
