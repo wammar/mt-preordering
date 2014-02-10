@@ -12,7 +12,8 @@ global {
   moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
   mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
   cdec_dir="/home/wammar/cdec/"
-  creg_bin="./creg/bin/gcc-4.7/release/threading-multi/creg"
+  creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
+  wammar_utils_dir="/usr0/home/wammar/wammar-utils"
   cores=16
   src="hi"
   tgt="en"
@@ -126,11 +127,16 @@ task ExtractLeftRightClassifierFeatures
 }
 
 task TrainLeftRightClassifier
+ :: creg_bin=@
+ :: wammar_utils_dir=@
  < features=$features@ExtractLeftRightClassifierFeatures
  < responses=$responses@ExtractLeftRightClassifierFeatures
+ > features_train  >  features_dev >  features_test
+ > responses_train >  responses_dev > responses_test
  > model
 {
-  /usr0/home/wammar/creg/bin/gcc-4.7/release/threading-multi/creg -x $features -y $responses  --l1 1000
+  python $wammar_utils_dir/vertical-split-parallel-corpus.py -ratio 100:1:1 -corpus-src $features -corpus-tgt $responses -train-src $features_train -train-tgt $responses_train -dev-src $features_dev -dev-tgt $responses_dev -test-src $features_test -test-tgt $responses_test
+  $creg_bin -x $features_train -y $responses_train --l1 1000 --tx $features_dev --ty $responses_dev --z $model -e 0.1 -d 0.00001
 }
 
 plan features {
