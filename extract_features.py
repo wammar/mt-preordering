@@ -72,22 +72,35 @@ def main():
   
 def extract(source, a_index, b_index, dependency):
   features = dict()
+  features['gap_size'] = b_index - a_index - 1
   features['a_token_'+source[a_index]] = 1
   features['b_token_'+source[b_index]] = 1
   features['a_pos_'+dependency['pos'][a_index]] = 1
   features['b_pos_'+dependency['pos'][b_index]] = 1
+  features['a_num_siblings'] = dependency['head'].count(dependency['head'][a_index]) - 1
+  features['b_num_siblings'] = dependency['head'].count(dependency['head'][b_index]) - 1
   if dependency['head'][a_index] < 0:
     features['a_root'] = 1
     b_parent = dependency['head'][b_index]
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_pos_'+dependency['pos'][b_parent]] = 1
     features['b_head_mod_'+dependency['mod'][b_parent]] = 1
+    if not dependency['head'][b_parent] < 0:
+      b_grand = dependency['head'][b_parent]
+      features['b_grandparent_token_'+source[b_grand]] = 1
+      features['b_grandparent_pos_'+dependency['pos'][b_grand]] = 1
+      features['b_grandparent_mod_'+dependency['mod'][b_grand]] = 1
   elif dependency['head'][b_index] < 0:
     features['b_root'] = 1
     a_parent = dependency['head'][a_index]
     features['a_head_token_'+source[a_parent]] = 1
     features['a_head_pos_'+dependency['pos'][a_parent]] = 1
     features['a_head_mod_'+dependency['mod'][a_parent]] = 1
+    if not dependency['head'][a_parent] < 0:
+      a_grand = dependency['head'][a_parent]
+      features['b_grandparent_token_'+source[a_grand]] = 1
+      features['b_grandparent_pos_'+dependency['pos'][a_grand]] = 1
+      features['b_grandparent_mod_'+dependency['mod'][a_grand]] = 1
   else:
     if dependency['head'][b_index]==dependency['head'][a_index]:
       features['same_head'] = 1
@@ -99,10 +112,20 @@ def extract(source, a_index, b_index, dependency):
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_pos_'+dependency['pos'][b_parent]] = 1
     features['b_head_mod_'+dependency['mod'][b_parent]] = 1
+    if not dependency['head'][b_parent] < 0:
+      b_grand = dependency['head'][b_parent]
+      features['b_head_token_'+source[b_grand]] = 1
+      features['b_head_pos_'+dependency['pos'][b_grand]] = 1
+      features['b_head_mod_'+dependency['mod'][b_grand]] = 1
     a_parent = dependency['head'][a_index]
     features['a_head_token_'+source[b_parent]] = 1
     features['a_head_pos_'+dependency['pos'][a_parent]] = 1
     features['a_head_mod_'+dependency['mod'][a_parent]] = 1
+    if not dependency['head'][a_parent] < 0:
+      a_grand = dependency['head'][a_parent]
+      features['b_head_token_'+source[a_grand]] = 1
+      features['b_head_pos_'+dependency['pos'][a_grand]] = 1
+      features['b_head_mod_'+dependency['mod'][a_grand]] = 1
   if (b_index - a_index) == 2:
     features['between_token_'+source[a_index+1]] = 1
     features['between_pos_'+dependency['pos'][a_index+1]] = 1
@@ -111,10 +134,13 @@ def extract(source, a_index, b_index, dependency):
     features['between_a_pos_'+dependency['pos'][a_index+1]] = 1
     features['between_b_token_'+source[b_index-1]] = 1
     features['between_b_pos_'+dependency['pos'][b_index-1]] = 1
-  
+ 
+  a_child = 0
+  b_child = 0
   for i in range(len(source)):
     mod = dependency['mod'][i]
     if dependency['head'][i]==a_index:
+      a_child += 1
       features['a_child_'+mod+'_token_'+source[i]] = 1
       features['a_child_'+mod+'_pos_'+dependency['pos'][i]] = 1
       if i < a_index:
@@ -130,6 +156,7 @@ def extract(source, a_index, b_index, dependency):
 
 
     elif dependency['head'][i]==b_index:
+      b_child += 1
       features['b_child_'+mod+'_token_'+source[i]] = 1
       features['b_child_'+mod+'_pos_'+dependency['pos'][i]] = 1
 
@@ -143,6 +170,8 @@ def extract(source, a_index, b_index, dependency):
           features['b_child_'+mod+'_immediately_after'] = 1
         else:
           features['b_child_'+mod+'_after'] = 1
+  features['a_num_children'] = a_child
+  features['b_num_children'] = b_child
   return features
 
 if __name__=='__main__':
