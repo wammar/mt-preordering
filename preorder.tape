@@ -4,33 +4,77 @@ global {
   ducttape_experimental_submitters=enable
   ducttape_experimental_imports=enable
 
-  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp000/"
-  preordering_home="/usr0/home/wammar/mt-preordering/"
+  # configs 
+  cores=16
+  src="hi"
+  tgt="en"
+
+  # data
   parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
+  tune_parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
+  tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
+
+  # tools
+  #ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
+  ducttape_output="OUTPUT_DIRECTORY"
+  preordering_home="/usr0/home/wammar/mt-preordering/"
   giza_bin="/opt/tools/mgizapp-0.7.2/bin"
   moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
   mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
   cdec_dir="/home/wammar/cdec/"
   creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
   wammar_utils_dir="/usr0/home/wammar/wammar-utils"
-  cores=16
-  src="hi"
-  tgt="en"
 
+  # options
   sym_heuristic=(SymHeuristic:
                       grow_diag_final_and="grow-diag-final-and"
                       grow_diag_final="grow-diag-final"
                       grow_diag="grow-diag"
                       intersect="intersect"
                       union="union")
+  
+  l1=(L1: thousand=1000  
+          hundred=100
+          ten=10
+          one=1
+          point_one=0.1
+          point_o_one=0.01
+          zero=0)
+
+  l2=(L2: thousand=1000  
+          hundred=100
+          ten=10
+          one=1
+          point_one=0.1
+          point_o_one=0.01
+          zero=0)
 
 }
 
+task FastAlignS2T
+    > alignment
+    :: corpus=@
+    :: cdec_dir=@
+    #:: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared 
+{
+  $cdec_dir/word-aligner/fast_align -i $corpus -d -v -o > $alignment
+}
+
+task FastAlignT2S
+    > alignment
+    :: corpus=@
+    :: cdec_dir=@
+   # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared
+ {
+  $cdec_dir/word-aligner/fast_align -i $corpus -d -v -o -r > $alignment
+}
+
+
 task GizaAlignS2T
-    < corpus=@
     > alignment
     > output_dir
+    :: corpus=@
     :: giza_bin=@
     :: moses_train_script=@
     :: cores=@
@@ -51,11 +95,17 @@ task Symmetrize
     < s2tAlignment=(Aligner:
                       giza=$alignment@GizaAlignS2T
                       giza_none=$alignment@GizaAlignS2T
-                      none_giza=$alignment@GizaAlignT2S)
+                      none_giza=$alignment@GizaAlignT2S
+                      fast=$alignment@FastAlignS2T
+                      fast_none=$alignment@FastAlignS2T
+                      none_fast=$alignment@FastAlignT2S)
     < t2sAlignment=(Aligner:
                       giza=$alignment@GizaAlignT2S
                       giza_none=$alignment@GizaAlignS2T
-                      none_giza=$alignment@GizaAlignT2S)
+                      none_giza=$alignment@GizaAlignT2S
+                      fast=$alignment@FastAlignT2S
+                      fast_none=$alignment@FastAlignS2T
+                      none_fast=$alignment@FastAlignT2S)
     > alignment
     :: sym_heuristic=@
     :: cdec_dir=@
@@ -102,14 +152,6 @@ task Evaluate
 {
 }
 
-task LeftRightClassify
-{
-}
-
-task ReorderingClassify
-{
-}
-
 task ExtractLeftRightClassifierFeatures
  :: preordering_home=@
  :: test=(Test: yes='--test' no='')
@@ -129,6 +171,8 @@ task ExtractLeftRightClassifierFeatures
 task TrainLeftRightClassifier
  :: creg_bin=@
  :: wammar_utils_dir=@
+ :: l1=@
+ :: l2=@
  < features=$features@ExtractLeftRightClassifierFeatures
  < responses=$responses@ExtractLeftRightClassifierFeatures
  > features_train  >  features_dev >  features_test
@@ -136,14 +180,34 @@ task TrainLeftRightClassifier
  > model
 {
   python $wammar_utils_dir/vertical-split-parallel-corpus.py -ratio 100:1:1 -corpus-src $features -corpus-tgt $responses -train-src $features_train -train-tgt $responses_train -dev-src $features_dev -dev-tgt $responses_dev -test-src $features_test -test-tgt $responses_test
-  $creg_bin -x $features_train -y $responses_train --l1 1000 --tx $features_dev --ty $responses_dev --z $model -e 0.1 -d 0.00001
+  $creg_bin -x $features_train -y $responses_train --l1 $l1 --l2 $l2 --tx $features_dev --ty $responses_dev --z $model -e 0.1 -d 0.00001
+}
+
+task ReorderSourceSentences
+  :: tune_set=@
+  :: tune_parses=@
+  :: cdec_dir=@
+  :: preordering_home=@
+  < model=$model@TrainLeftRightClassifier
+  > log
+  > reordered
+{
+  $cdec_dir/corpus/cut-corpus.pl 1 $tune_set > source
+
+  python $preordering_home/induce_pairwise_reordering.py -p $tune_parses -o word_pairs --test
+  python $preordering_home/extract_features.py --test -s source -d $tune_parses -t word_pairs -f features > $log
+  $creg_bin -x features -w $model > responses
+  python $wammar_utils_dir/horizontal_split_parallel_corpus.py -d '\t' -i word_pairs -o auto_responses sent_ids first_positions second_positions
+  python $wammar_utils_dir/paste.py -d '\t' -i responses sent_ids first_positions second_positions -o word_pairs_partial_order
+  python $preordering_home/reorder_src_sents.py -p $tune_parses -s source -w word_pairs_partial_order -o $reordered
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Test: no) * (Aligner: giza)
+  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero)
 }
 
-plan full 
+plan Full 
 {
-  reach Test via (Aligner: giza) 
+  reach ReorderSourceSentences via (Aligner: fast) 
 }
+
