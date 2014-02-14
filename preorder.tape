@@ -52,6 +52,15 @@ task ProcessSource : turboparser
   cat $tags | $parser -m $parse_model -t $turboparser > $conll_parse
 }
 
+task ClusterSource
+:: clusterize=@
+< corpus=(Corpus: train=$corpus dev=$tune_set)
+< cluster_paths=$cluster_path_hi
+> cluster_source
+{
+  cat $corpus | $clusterize $cluster_paths > $cluster_source
+}
+
 task FastAlignS2T
     > alignment
     :: corpus=@
@@ -144,12 +153,23 @@ task InducePairwiseReordering
   python $preordering_home/induce_pairwise_reordering.py -a $alignment -p $parses -o $reorderings
 }
 
-task DependencyParse
+task Evaluate
 {
 }
 
-task Evaluate
-{
+task ExtractDeletionFeatures
+ :: preordering_home=@
+ :: cdec_dir=@
+ < cluster_source=@ClusterSource
+# < training
+ < parses=@
+ < corpus=@
+ > features
+ > responses
+ > log {
+  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
+  python $preordering_home/extract_deletion_features.py -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
+  rm source
 }
 
 task ExtractLeftRightClassifierFeatures
@@ -157,7 +177,7 @@ task ExtractLeftRightClassifierFeatures
  :: test=(Test: no='' yes='--test')
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
- :: cluster_source=@
+ < cluster_source=@ClusterSource
  < training=$reorderings@InducePairwiseReordering
  < parses=@
  < corpus=@
@@ -193,7 +213,7 @@ task ReorderSourceSentences
   :: preordering_home=@
   :: creg_bin=@
   :: wammar_utils_dir=@
-  :: cluster_source=@
+  < cluster_source=@ClusterSource
   < tune_parses=$conll_parse@ProcessSource
   < train_features=$features@ExtractLeftRightClassifierFeatures
   < train_responses=$responses@ExtractLeftRightClassifierFeatures
@@ -214,6 +234,10 @@ task ReorderSourceSentences
 
 plan features {
   reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero) * (RelationFeatures: *)
+}
+
+plan cluster {
+  reach ClusterSource via (Corpus: dev)
 }
 
 plan test_parser {

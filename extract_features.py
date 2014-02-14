@@ -152,7 +152,7 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
       features['b_grandparent_mod_'+dependency['mod'][b_grand]] = 1
     a_parent = dependency['head'][a_index]
     features['a_head_token_'+source[a_parent]] = 1
-    features['a_head_cluster_'+clusters[b_parent]] = 1
+    features['a_head_cluster_'+clusters[a_parent]] = 1
     features['a_head_pos_'+dependency['pos'][a_parent]] = 1
     features['a_head_mod_'+dependency['mod'][a_parent]] = 1
     if not dependency['head'][a_parent] < 0:
@@ -206,7 +206,7 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
         else:
           features['b_child_'+mod+'_before'] = 1
       else:
-        if (i-a_index)==1:
+        if (i-b_index)==1:
           features['b_child_'+mod+'_immediately_after'] = 1
         else:
           features['b_child_'+mod+'_after'] = 1
