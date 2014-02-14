@@ -11,14 +11,15 @@ global {
 
   # data
   parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
+  preordering_home="/usr0/home/wammar/mt-preordering/"
+  #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
   tune_parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
+  cluster_source="/usr1/home/eschling/wmt/parallel.hi.cluster"
 
   # tools
-  #ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
-  ducttape_output="OUTPUT_DIRECTORY"
-  preordering_home="/usr0/home/wammar/mt-preordering/"
+  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
   giza_bin="/opt/tools/mgizapp-0.7.2/bin"
   moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
   mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
@@ -83,11 +84,11 @@ task GizaAlignS2T
     :: cdec_dir=@
   #  :: .submitter=torque_normal .walltime="12:00:00" .cpus=1 .vmem=32g .q=normal 
 {
+  cp $corpus corpus
+  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > corpus.$src
+  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > corpus.$tgt
 
-  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > $corpus.$src
-  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > $corpus.$tgt
-
-  $moses_train_script --first-step 1 --last-step 3 --parallel --root-dir $output_dir --corpus $corpus --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$cores --alignment srctotgt 
+  $moses_train_script --first-step 1 --last-step 3 --parallel --root-dir $output_dir --corpus corpus --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$cores --alignment srctotgt 
   cp $output_dir/model/aligned.srctotgt $alignment
 }
 
@@ -126,11 +127,11 @@ task GizaAlignT2S
     :: cdec_dir=@
   #  :: .submitter=torque_normal .walltime="12:00:00" .cpus=32 .vmem=32g .q=normal
  {
+  cp $corpus corpus
+  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > corpus.$src
+  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > corpus.$tgt
 
-  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > $corpus.$src
-  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > $corpus.$tgt
-
-  $moses_train_script --first-step 3 --last-step 3 --parallel --root-dir $output_dir --corpus $corpus --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$cores --alignment tgttosrc 
+  $moses_train_script --first-step 3 --last-step 3 --parallel --root-dir $output_dir --corpus corpus --f $src --e $tgt --external-bin-dir $giza_bin --mgiza $giza_bin --mgiza-cpus=$cores --alignment tgttosrc 
   cp $output_dir/model/aligned.tgttosrc $alignment
 }
 
@@ -154,8 +155,10 @@ task Evaluate
 
 task ExtractLeftRightClassifierFeatures
  :: preordering_home=@
- :: test=(Test: yes='--test' no='')
+ :: test=(Test: no='' yes='--test')
+ :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
+ :: cluster_source=(Clusters: no='' yes=$cluster_source)
  < training=$reorderings@InducePairwiseReordering
  < parses=@
  < corpus=@
@@ -164,7 +167,7 @@ task ExtractLeftRightClassifierFeatures
  > log 
 {
   $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
-  python $preordering_home/extract_features.py $test -s source -d $parses -t $training -f $features -r $responses > $log
+  python $preordering_home/extract_features.py $add_relation $test -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
   rm source
 }
 
@@ -203,7 +206,7 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero)
+  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero) * (RelationFeatures: yes) * (Clusters: yes)
 }
 
 plan Full 
