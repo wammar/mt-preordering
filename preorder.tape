@@ -10,7 +10,7 @@ global {
   tgt="en"
 
   # data
-  parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
+  parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
   tune_parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
