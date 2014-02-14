@@ -59,6 +59,9 @@ def main():
         print t,
       print ''
       print dependency['token']
+      response_file.write('{}\t{}\n'.format(instance,label))
+      feature_file.write("{}\t{{\"corrupted\"= 1}}\n".format(instance))
+      instance += 1
       continue
 
     if not args.test:
