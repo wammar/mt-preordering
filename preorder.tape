@@ -3,6 +3,7 @@
 global {
   ducttape_experimental_submitters=enable
   ducttape_experimental_imports=enable
+  ducttape_experimental_packages=true
 
   # configs 
   cores=16
@@ -12,20 +13,25 @@ global {
   # data
   parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
   preordering_home="/usr0/home/wammar/mt-preordering/"
+  #preordering_home="/usr2/home/eschling/wmt/mt-preordering/" 
   #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
-  tune_parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
   tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
   cluster_source="/usr1/home/eschling/wmt/parallel.hi.cluster"
+  tag_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_tagger_full.model"
+  parse_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_parser_full.model"
 
   # tools
   ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
+  #ducttape_output="/usr2/home/eschling/mt-preordering/hi-en-exp000/"
   giza_bin="/opt/tools/mgizapp-0.7.2/bin"
   moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
   mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
   cdec_dir="/home/wammar/cdec/"
   creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
   wammar_utils_dir="/usr0/home/wammar/wammar-utils"
+  tagger="/usr2/home/eschling/wmt/mt-preordering/turbotag.py"
+  parser="/usr2/home/eschling/wmt/mt-preordering/turboparse.py"
 
   # options
   sym_heuristic=(SymHeuristic:
@@ -51,6 +57,27 @@ global {
           point_o_one=0.01
           zero=0)
 
+}
+
+# clone TurboParser and download trained models for tagging and parsing English
+package turboparser :: .versioner=git .repo="https://github.com/andre-martins/TurboParser.git" .ref=HEAD {
+  ./install_deps.sh
+  ./configure && make && make install
+  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:`pwd;`/deps/local/lib:"
+}
+
+task ProcessSource : turboparser
+:: tagger=@
+:: parser=@
+:: cdec_dir=@
+:: tag_model=$tag_model_hi
+:: parse_model=$parse_model_hi
+< corpus=(Corpus: train=$corpus dev=$tune_set)
+> conll_parse
+> tags
+{
+  cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $tagger $tag_model $turboparser > $tags
+  cat $tags | $parser -m $parse_model -t $turboparser > $conll_parse
 }
 
 task FastAlignS2T
@@ -158,7 +185,7 @@ task ExtractLeftRightClassifierFeatures
  :: test=(Test: no='' yes='--test')
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
- :: cluster_source=(Clusters: no='' yes=$cluster_source)
+ :: cluster_source=$cluster_source
  < training=$reorderings@InducePairwiseReordering
  < parses=@
  < corpus=@
@@ -188,9 +215,9 @@ task TrainLeftRightClassifier
 
 task ReorderSourceSentences
   :: tune_set=@
-  :: tune_parses=@
   :: cdec_dir=@
   :: preordering_home=@
+  < tune_parses=$conll_parse@ProcessSource
   < model=$model@TrainLeftRightClassifier
   > log
   > reordered
@@ -206,7 +233,11 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero) * (RelationFeatures: yes) * (Clusters: yes)
+  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero) * (RelationFeatures: *)
+}
+
+plan test_parser {
+  reach ProcessSource via (Corpus: dev)
 }
 
 plan Full 
