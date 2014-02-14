@@ -15,12 +15,15 @@ argParser.add_argument('-w', '--word_pair_order_filename',
                        help='partial order between some source word pairs. one word pair per line, with four tab-separated fields: reverse, sent_id, first_word_zero_based_position, second_word_zero_based_position')
 argParser.add_argument('-o', '--output_filename',
                        help='reordered source text. one sentence per line.')
+argParser.add_argument('-oi', '--reordered_indexes_filename',
+                       help='reordered indexes of tokens in a source sentence. one sentence per line.')
 args = argParser.parse_args()
 
 parses_file=io.open(args.parses_filename, encoding='utf8')
 src_file=io.open(args.source_filename, encoding='utf8')
 word_pair_order_file=io.open(args.word_pair_order_filename, encoding='utf8')
 output_file=io.open(args.output_filename, encoding='utf8', mode='w')
+reordered_indexes_file = io.open(args.reordered_indexes_filename, encoding='utf8', mode='w')
 min_src_sent_length=5
 
 parent2order=defaultdict(list)
@@ -45,26 +48,34 @@ def order_family(root_position):
 
 def postorder_traverse(root_position, visit_function):
   # base case
-  if root_position not in parent2child:
+  if root_position not in parent2children:
     return
   # recurse
   for child_position in parent2children[root_position]:
-    visit_function(child_position)
+    postorder_traverse(child_position, visit_function)
   # visit
   visit_function(root_position)
 
 sent_id = -1
+sent_ids_with_multiple_roots = []
+sent_ids_with_bad_parses = []
 while True:
   sent_id += 1
+  #print '==========================='
+  if sent_id % 1000 == 0:
+    print 'processing sent_id', sent_id
 
   # read source sentence
   src_line = src_file.readline()
+  if not src_line:
+    break
   src_tokens = src_line.strip().split(' ')
-
+  #print src_tokens
+  
   # read all source word pairs partial reorderings for this sentence
   word_pair_order = {}
   while True:
-    prev_line_starts_at=word_pair_order_file.tell()
+    prev_line_starts_at = word_pair_order_file.tell()
     line = word_pair_order_file.readline()
     if not line: break
     splits = line.strip().split('\t')
@@ -72,13 +83,15 @@ while True:
     if sent_id != word_pair_sent_id:
       word_pair_order_file.seek(prev_line_starts_at)
       break
+    #print sent_id, 'reverse[', first_position,', ',second_position,']=',reverse
     word_pair_order[(first_position, second_position,)] = reverse
-    
+      
   # reading sentence parse
   parent2children = defaultdict(list)
   child2parent = defaultdict(int)
   max_child_position = 0
   root = -1
+  several_roots = False
   while True:
     conll_fields = parses_file.readline().strip().split('\t')
     if len(conll_fields) != 8: break
@@ -88,31 +101,65 @@ while True:
       parent2children[parent_position].append(child_position)
       child2parent[child_position] = parent_position
     else:
+      if root != -1: several_roots = True
       root = child_position
-  assert root != -1
-  assert len(child2parent) == len(src_tokens)-1
+    
+  # skip sentences which have several roots
+  if several_roots:
+    sent_ids_with_multiple_roots.append(sent_id)
+    reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(i) for i in xrange(len(src_tokens))])))
+    output_file.write(src_line)
+    continue
+
+  if len(child2parent) != len(src_tokens)-1 or root == -1:
+    sent_ids_with_bad_parses.append(sent_id)
+    reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(i) for i in xrange(len(src_tokens))])))
+    output_file.write(src_line)
+    continue
 
   # skip sentences which have fewer than 5 src words
-  if max_child_position < min_src_sent_length-1:
+  if len(src_tokens) < min_src_sent_length:
+    reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(i) for i in xrange(len(src_tokens))])))
     output_file.write(src_line)
     continue
 
   # now we do one postorder traversal of all nodes in the dependency tree. while visiting a node X, we determine a complete order for the members of the family rooted at X (i.e. X and its direct children), based on partial reorderings between pairs of those members.
+  parent2order=defaultdict(list)
   postorder_traverse(root, order_family)
-
+  #print 'parent2order=',parent2order
+  
   # then, we repeatedly replace every parent with a complete ordering of its family
   complete_order = [root]
   while len(complete_order) < len(src_tokens):
-    for expandable in [parent for parent in complete_order if parent in parent2children]:
-      explandable_index = complete_order.index(expandable)
-      complete_order = complete_order[:expandable_index] + \
-          parent2order[expandable_index] + \
-          complete_order[expandable_index+1:]
+    #print 'complete_order=',complete_order
+    #print 'len(complete_order) = ', len(complete_order)
+    expandables = [parent for parent in complete_order if parent in parent2children]
+    #print 'expandables = ', expandables
+    for expandable in expandables:
+      expandable_index = complete_order.index(expandable)
+      #print 'now expanding the parent ', expandable, ' which has index ', expandable_index, ' in compete_order list'
+      #print 'will replace it with parent2order[',expandable,'] = ', parent2order[expandable]
+      #print 'note that parent2order = ', parent2order
+      complete_order = complete_order[:expandable_index] + parent2order[expandable] + complete_order[expandable_index+1:]
+      #print 'now complete_order = ', complete_order
       del parent2children[expandable]
 
   # we are done!
+  #print complete_order
+  # write the reordered indexes to file
+  reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(position) for position in complete_order] )))
+  # replace each index with the actual source word
   for i in xrange(len(complete_order)):
     complete_order[i] = src_tokens[ complete_order[i] ]
+  # write the reordered tokens to another file
   output_file.write(u'{}\n'.format(' '.join(complete_order)))
 
+reordered_indexes_file.close()
 output_file.close()
+
+print len(sent_ids_with_multiple_roots), 'sent_ids_with_multiple_roots = '
+print ' '.join(sent_ids_with_multiple_roots)
+print 
+print len(sent_ids_with_bad_parses), 'sent_ids_with_bad_parses = '
+print ' '.join(sent_ids_with_bad_parses)
+print

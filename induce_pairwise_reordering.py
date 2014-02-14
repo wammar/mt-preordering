@@ -13,7 +13,7 @@ argParser.add_argument("-a", "--align_filename",
                        help="Source-Target word alignments of the parallel corpus. One sentence pair per line.")
 argParser.add_argument("-o", "--output_filename",
                        help="Output pairwise preordering training data.")
-argParser.add_argument('-t', '--test', 
+argParser.add_argument('-t', '--test', action='store_true',
                        help='Find all reorderings potentially needed at test time. No alignments file needed. the responses column in output is always 0.')
 
 args = argParser.parse_args()
@@ -49,9 +49,14 @@ while True:
 
   max_child_position = 0
   length_of_pcm=0
+  end_of_file = False
   while True:
     conll_line += 1
-    conll_fields = parses_file.readline().strip().split('\t')
+    line = parses_file.readline()
+    if not line: 
+      end_of_file = True
+      break
+    conll_fields = line.strip().split('\t')
     if len(conll_fields) != 8: 
       length_of_pcm += 0.5
       break
@@ -64,13 +69,15 @@ while True:
     src_family_word_pairs.append( ( min(child_position, parent_position), 
                                     max(child_position, parent_position),) )
   
+  if end_of_file:
+    break
+
   if len(parent_children_map) == 0:
-    print conll_line
-    print length_of_pcm
-    print len(conll_fields)
-    print sent_id
-    print sent_align
-    print parent_children_map
+    print 'conll_line=',conll_line
+    print 'length_of_pcm=',length_of_pcm
+    print 'len(conll_fields)=',len(conll_fields)
+    print 'sent_id = ', sent_id
+    print 'parent_child_map',parent_children_map
 
   assert len(parent_children_map) > 0
   for parent_position in parent_children_map.keys():

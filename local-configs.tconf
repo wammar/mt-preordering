@@ -1,0 +1,32 @@
+
+global {
+
+  # hot configs 
+  cores=16
+  preordering_home="/usr0/home/wammar/mt-preordering/"
+  #preordering_home="/usr2/home/eschling/wmt/mt-preordering/" 
+  parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
+  #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
+  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
+  #ducttape_output="/usr2/home/eschling/mt-preordering/hi-en-exp000/"
+  
+  src="hi"
+  tgt="en"
+
+  # data
+  corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
+  tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
+  cluster_source="/usr1/home/eschling/wmt/parallel.hi.cluster"
+  tag_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_tagger_full.model"
+  parse_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_parser_full.model"
+
+  # tools
+  giza_bin="/opt/tools/mgizapp-0.7.2/bin"
+  moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
+  mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
+  cdec_dir="/home/wammar/cdec/"
+  creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
+  wammar_utils_dir="/usr0/home/wammar/wammar-utils"
+  tagger="/usr2/home/eschling/wmt/mt-preordering/turbotag.py"
+  parser="/usr2/home/eschling/wmt/mt-preordering/turboparse.py"
+}

@@ -5,34 +5,6 @@ global {
   ducttape_experimental_imports=enable
   ducttape_experimental_packages=true
 
-  # configs 
-  cores=16
-  src="hi"
-  tgt="en"
-
-  # data
-  parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
-  preordering_home="/usr0/home/wammar/mt-preordering/"
-  #preordering_home="/usr2/home/eschling/wmt/mt-preordering/" 
-  #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
-  corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
-  tune_set="/usr1/home/wammar/parallel/dev/tune.hien"
-  cluster_source="/usr1/home/eschling/wmt/parallel.hi.cluster"
-  tag_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_tagger_full.model"
-  parse_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_parser_full.model"
-
-  # tools
-  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
-  #ducttape_output="/usr2/home/eschling/mt-preordering/hi-en-exp000/"
-  giza_bin="/opt/tools/mgizapp-0.7.2/bin"
-  moses_train_script="/home/wammar/mosesdecoder/scripts/training/train-model.perl"
-  mkcls_bin="/mal0/tools/mosesdecoder/bin/mkcls"
-  cdec_dir="/home/wammar/cdec/"
-  creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
-  wammar_utils_dir="/usr0/home/wammar/wammar-utils"
-  tagger="/usr2/home/eschling/wmt/mt-preordering/turbotag.py"
-  parser="/usr2/home/eschling/wmt/mt-preordering/turboparse.py"
-
   # options
   sym_heuristic=(SymHeuristic:
                       grow_diag_final_and="grow-diag-final-and"
@@ -185,7 +157,7 @@ task ExtractLeftRightClassifierFeatures
  :: test=(Test: no='' yes='--test')
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
- :: cluster_source=$cluster_source
+ :: cluster_source=@
  < training=$reorderings@InducePairwiseReordering
  < parses=@
  < corpus=@
@@ -214,21 +186,29 @@ task TrainLeftRightClassifier
 }
 
 task ReorderSourceSentences
+  :: l1=@
+  :: l2=@
   :: tune_set=@
   :: cdec_dir=@
   :: preordering_home=@
+  :: creg_bin=@
+  :: wammar_utils_dir=@
+  :: cluster_source=@
   < tune_parses=$conll_parse@ProcessSource
-  < model=$model@TrainLeftRightClassifier
+  < train_features=$features@ExtractLeftRightClassifierFeatures
+  < train_responses=$responses@ExtractLeftRightClassifierFeatures
   > log
   > reordered
+  > model
 {
   $cdec_dir/corpus/cut-corpus.pl 1 $tune_set > source
 
   python $preordering_home/induce_pairwise_reordering.py -p $tune_parses -o word_pairs --test
-  python $preordering_home/extract_features.py --test -s source -d $tune_parses -t word_pairs -f features > $log
-  $creg_bin -x features -w $model > responses
-  python $wammar_utils_dir/horizontal_split_parallel_corpus.py -d '\t' -i word_pairs -o auto_responses sent_ids first_positions second_positions
-  python $wammar_utils_dir/paste.py -d '\t' -i responses sent_ids first_positions second_positions -o word_pairs_partial_order
+  python $preordering_home/extract_features.py --test -s source -d $tune_parses -t word_pairs -f features -r empty_responses  -c $cluster_source > $log
+  $creg_bin -x $train_features -y $train_responses --l1 $l1 --l2 $l2 --tx features --z $model -e 0.1 -d 0.00001 > ids_responses
+  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i word_pairs -o auto_responses sent_ids first_positions second_positions
+  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i ids_responses -o ids responses
+  python $wammar_utils_dir/paste.py -i responses sent_ids first_positions second_positions -o word_pairs_partial_order
   python $preordering_home/reorder_src_sents.py -p $tune_parses -s source -w word_pairs_partial_order -o $reordered
 }
 
@@ -242,6 +222,6 @@ plan test_parser {
 
 plan Full 
 {
-  reach ReorderSourceSentences via (Aligner: fast) 
+  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) 
 }
 

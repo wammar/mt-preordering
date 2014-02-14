@@ -15,6 +15,8 @@ def main():
   parser.add_argument('-e','--extra', action='store_true',help='for each feature, have two versions: one which explicitly contains the relationship between a and b, and one that does not')
   args = parser.parse_args()
 
+  print 'args.test = ', args.test
+
   source_file = open(args.source)
   cluster_file = open(args.cluster)
   dependency_file = open(args.dependency)
