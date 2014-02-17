@@ -44,12 +44,13 @@ task ProcessSource : turboparser
 :: cdec_dir=@
 :: tag_model=$tag_model_hi
 :: parse_model=$parse_model_hi
+:: fine2coarse=@
 < corpus=(Corpus: train=$corpus dev=$tune_set)
 > conll_parse
 > tags
 {
   cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $tagger $tag_model $turboparser > $tags
-  cat $tags | $parser -m $parse_model -t $turboparser > $conll_parse
+  cat $tags | $parser -m $parse_model -t $turboparser --coarse $fine2coarse > $conll_parse
 }
 
 task ClusterSource

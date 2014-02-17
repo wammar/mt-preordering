@@ -6,20 +6,23 @@ import subprocess as sp
 import multiprocessing as mp
 import argparse
 
-#MODEL = os.path.dirname(__file__)+'/models/english_proj_parser_pruned-false_model-basic.model'
-#MODEL = os.path.dirname(__file__)+'/models/stanford_dep_standard.model'
-#MODEL = os.path.dirname(__file__)+'/models/stanford_dep_basic.model'
 MODEL = '/home/eschling/tools/TurboParser-2.1.0/models/hindi_parser_full.model'
 PARSER = '/home/eschling/tools/TurboParser-2.1.0'
 os.environ['LD_LIBRARY_PATH'] = '/home/eschling/tools/TurboParser-2.1.0/deps/local/lib'
 
 parser = None
-def start_parser(model=MODEL,parser_loc=PARSER):
+pos_map = dict()
+def start_parser(model=MODEL,parser_loc=PARSER, coarse=''):
     
     global parser
     parser = sp.Popen([parser_loc+'/TurboParser', '--test', '--file_model='+model,
         '--file_test=/dev/stdin', '--file_prediction=/dev/stdout'],
         stdin=sp.PIPE, stdout=sp.PIPE)
+    if coarse:
+      fine2coarse = open(coarse)
+      for line in fine2coarse:
+        fine_pos, coarse_pos = line.strip().split('\t')
+        pos_map[fine_pos] = coarse_pos 
 
 def parse(line):
     global parser
@@ -28,7 +31,10 @@ def parse(line):
     tags = tagged.split()
     assert len(words) == len(tags)
     for i, (word, tag) in enumerate(izip(words, tags), 1):
-        stag = tag if tag in ('PRP', 'PRP$') else tag[:2]
+        if len(pos_map)==0:
+          stag = tag if tag in ('PRP', 'PRP$') else tag[:2]
+        elif tag in pos_map:
+          stag = pos_map[tag]
         parser.stdin.write('{}\t{}\t_\t{}\t{}\t_\t_\t_\n'.format(i, word, stag, tag))
     parser.stdin.write('\n')
     parser.stdin.flush()
@@ -52,9 +58,10 @@ def main():
             help='data chunk size')
     arg_parser.add_argument('-t','--turbo', help='turboparser location')
     arg_parser.add_argument('-m','--model',help='TurboParser model to use', required=False)
+    arg_parser.add_argument('--coarse',help='fine to coarse POS tag mapping to use',required=False)
     args = arg_parser.parse_args()
 
-    pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo))
+    pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo, coarse=args.coarse))
 
     for sentence, tagged, parsed, conll in pool.imap(parse, sys.stdin, chunksize=args.chunk):
         #print('{} ||| {} ||| {}'.format(sentence, tagged, parsed))
