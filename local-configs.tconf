@@ -7,7 +7,7 @@ global {
   #preordering_home="/usr2/home/eschling/wmt/mt-preordering/" 
   parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
   #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
-  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp001/"
+  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp003/"
   #ducttape_output="/usr2/home/eschling/mt-preordering/hi-en-exp000/"
   fine2coarse="/usr2/home/eschling/wmt/mt-preordering/fine2coarse" 
  
@@ -28,7 +28,5 @@ global {
   cdec_dir="/home/wammar/cdec/"
   creg_bin="/usr0/home/wammar/creg/dist/bin/creg"
   wammar_utils_dir="/usr0/home/wammar/wammar-utils"
-  tagger="/usr2/home/eschling/wmt/mt-preordering/turbotag.py"
-  parser="/usr2/home/eschling/wmt/mt-preordering/turboparse.py"
   clusterize="/home/cdyer/tools/to-cluster.py"
 }

@@ -39,18 +39,17 @@ package turboparser :: .versioner=git .repo="https://github.com/andre-martins/Tu
 }
 
 task ProcessSource : turboparser
-:: tagger=@
-:: parser=@
 :: cdec_dir=@
 :: tag_model=$tag_model_hi
 :: parse_model=$parse_model_hi
 :: fine2coarse=@
+:: preordering_dir=@
 < corpus=(Corpus: train=$corpus dev=$tune_set)
 > conll_parse
 > tags
 {
-  cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $tagger $tag_model $turboparser > $tags
-  cat $tags | $parser -m $parse_model -t $turboparser --coarse $fine2coarse > $conll_parse
+  cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $preordering_dir/turbotag.py $tag_model $turboparser > $tags
+  cat $tags | $preordering_dir/turboparse.py -m $parse_model -t $turboparser --coarse $fine2coarse > $conll_parse
 }
 
 task ClusterSource

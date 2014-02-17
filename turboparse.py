@@ -12,6 +12,7 @@ os.environ['LD_LIBRARY_PATH'] = '/home/eschling/tools/TurboParser-2.1.0/deps/loc
 
 parser = None
 pos_map = dict()
+unknown_tags = 0
 def start_parser(model=MODEL,parser_loc=PARSER, coarse=''):
     
     global parser
@@ -26,15 +27,21 @@ def start_parser(model=MODEL,parser_loc=PARSER, coarse=''):
 
 def parse(line):
     global parser
+    global pos_map
+    global unknown_tags
     sentence, tagged = line[:-1].split(' ||| ')
     words = sentence.split()
     tags = tagged.split()
     assert len(words) == len(tags)
     for i, (word, tag) in enumerate(izip(words, tags), 1):
+        stag = '_'
         if len(pos_map)==0:
           stag = tag if tag in ('PRP', 'PRP$') else tag[:2]
         elif tag in pos_map:
           stag = pos_map[tag]
+        else:
+          unknown_tags += 1
+          sys.stderr.write('{} does not have coarse mapping'.format(tag)) 
         parser.stdin.write('{}\t{}\t_\t{}\t{}\t_\t_\t_\n'.format(i, word, stag, tag))
     parser.stdin.write('\n')
     parser.stdin.flush()
@@ -66,6 +73,7 @@ def main():
     for sentence, tagged, parsed, conll in pool.imap(parse, sys.stdin, chunksize=args.chunk):
         #print('{} ||| {} ||| {}'.format(sentence, tagged, parsed))
         print(conll)
+    sys.stderr.write('{} tags without fine to coarse mappings'.format(unknown_tags))
         
 if __name__ == '__main__':
     main()
