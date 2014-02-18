@@ -39,6 +39,7 @@ def main():
       clusters = cluster_file.readline().strip().split()
       source_line +=1
       dependency['token']=[]
+      dependency['coarse']=[]
       dependency['pos']=[]
       dependency['head']=[]
       dependency['mod']=[]
@@ -48,7 +49,8 @@ def main():
       while parse:
         conll = parse.split('\t')
         dependency['token'].append(conll[1])
-        dependency['pos'].append(conll[3])
+        dependency['coarse'].append(conll[3])
+        dependency['pos'].append(conll[4])
         dependency['head'].append(int(conll[6])-1)
         dependency['mod'].append(conll[7])
         dep_line += 1
@@ -104,6 +106,8 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
   features['b_cluster_'+clusters[b_index]] = 1
   features['a_pos_'+dependency['pos'][a_index]] = 1
   features['b_pos_'+dependency['pos'][b_index]] = 1
+  features['a_coarse_'+dependency['coarse'][a_index]] = 1
+  features['b_coarse_'+dependency['coarse'][b_index]] = 1
   features['a_num_siblings'] = dependency['head'].count(dependency['head'][a_index]) - 1
   features['b_num_siblings'] = dependency['head'].count(dependency['head'][b_index]) - 1
   if dependency['head'][a_index] < 0:
@@ -112,12 +116,14 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_cluster_'+clusters[b_parent]] = 1
     features['b_head_pos_'+dependency['pos'][b_parent]] = 1
+    features['b_head_coarse_'+dependecy['coarse'][b_parent]] = 1
     features['b_head_mod_'+dependency['mod'][b_parent]] = 1
     if not dependency['head'][b_parent] < 0:
       b_grand = dependency['head'][b_parent]
       features['b_grandparent_token_'+source[b_grand]] = 1
       features['b_grandparent_cluster_'+clusters[b_grand]] = 1
       features['b_grandparent_pos_'+dependency['pos'][b_grand]] = 1
+      features['b_grandparent_coarse_'+dependency['coarse'][b_grand]] = 1
       features['b_grandparent_mod_'+dependency['mod'][b_grand]] = 1
   elif dependency['head'][b_index] < 0:
     features['b_root'] = 1
@@ -125,12 +131,14 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
     features['a_head_token_'+source[a_parent]] = 1
     features['a_head_cluster_'+clusters[a_parent]] = 1 
     features['a_head_pos_'+dependency['pos'][a_parent]] = 1
+    features['a_head_coarse_'+dependency['coarse'][a_parent]] = 1
     features['a_head_mod_'+dependency['mod'][a_parent]] = 1
     if not dependency['head'][a_parent] < 0:
       a_grand = dependency['head'][a_parent]
       features['a_grandparent_token_'+source[a_grand]] = 1
       features['a_grandparent_cluster_'+clusters[a_grand]] = 1
       features['a_grandparent_pos_'+dependency['pos'][a_grand]] = 1
+      features['a_grandparent_coarse_'+dependency['coarse'][a_grand]] = 1
       features['a_grandparent_mod_'+dependency['mod'][a_grand]] = 1
   else:
     if dependency['head'][b_index]==dependency['head'][a_index]:
@@ -143,36 +151,60 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_cluster_'+clusters[b_parent]] = 1
     features['b_head_pos_'+dependency['pos'][b_parent]] = 1
+    features['b_head_coarse_'+dependency['coarse'][b_parent]] = 1
     features['b_head_mod_'+dependency['mod'][b_parent]] = 1
     if not dependency['head'][b_parent] < 0:
       b_grand = dependency['head'][b_parent]
       features['b_grandparent_token_'+source[b_grand]] = 1
       features['b_grandparent_cluster_'+clusters[b_grand]] = 1
       features['b_grandparent_pos_'+dependency['pos'][b_grand]] = 1
+      features['b_grandparent_coarse_'+dependency['coarse'][b_grand]] = 1
       features['b_grandparent_mod_'+dependency['mod'][b_grand]] = 1
     a_parent = dependency['head'][a_index]
     features['a_head_token_'+source[a_parent]] = 1
     features['a_head_cluster_'+clusters[a_parent]] = 1
     features['a_head_pos_'+dependency['pos'][a_parent]] = 1
+    features['a_head_coarse_'+dependency['pos'][a_parent]] = 1
     features['a_head_mod_'+dependency['mod'][a_parent]] = 1
     if not dependency['head'][a_parent] < 0:
       a_grand = dependency['head'][a_parent]
       features['a_grandparent_token_'+source[a_grand]] = 1
       features['a_grandparent_cluster_'+clusters[a_grand]] = 1
       features['a_grandparent_pos_'+dependency['pos'][a_grand]] = 1
+      features['a_grandparent_coarse_'+dependency['coarse'][a_grand]] = 1
       features['a_grandparent_mod_'+dependency['mod'][a_grand]] = 1
   if (b_index - a_index) == 2:
     features['between_token_'+source[a_index+1]] = 1
     features['between_cluster_'+clusters[a_index+1]] = 1
+    features['between_coarse_'+dependency['coarse'][a_index+1]] = 1
     features['between_pos_'+dependency['pos'][a_index+1]] = 1
-  elif (b_index - a_index) > 2:
-    features['between_a_token_'+source[a_index+1]] = 1
-    features['between_a_cluster_'+clusters[a_index+1]] = 1 
-    features['between_a_pos_'+dependency['pos'][a_index+1]] = 1
-    features['between_b_token_'+source[b_index-1]] = 1
-    features['between_b_cluster_'+clusters[b_index-1]] = 1
-    features['between_b_pos_'+dependency['pos'][b_index-1]] = 1
- 
+
+  if a_index - 1 > -1:
+    features['a_-1_token_'+source[a_index-1]] = 1
+    features['a_-1_pos_'+dependency['pos'][a_index-1]] = 1
+    features['a_-1_cluster_'+clusters[a_index-1]] = 1
+    features['a_-1_coarse_'+dependency['coarse'][a_index-1]] = 1
+    features['a_bigram_'+source[a_index-1]+'_'+source[a_index]] = 1
+  if b_index - 1 > -1:
+    features['b_-1_token_'+source[b_index-1]] = 1
+    features['b_-1_pos_'+dependency['pos'][b_index-1]] = 1
+    features['b_-1_cluster_'+clusters[b_index-1]] = 1
+    features['b_-1_coarse_'+dependency['coarse'][b_index-1]] = 1
+    features['b_bigram_'+source[a_index-1]+'_'+source[b_index]] = 1
+  if a_index + 1 < len(source):
+    features['a_+1_token_'+source[a_index+1]] = 1
+    features['a_+1_pos_'+dependency['pos'][a_index+1]] = 1
+    features['a_+1_cluster_'+clusters[a_index+1]] = 1
+    features['a_+1_coarse_'+dependency['coarse'][a_index+1]] = 1
+    features['a_bigram_'+source[a_index]+'_'+source[a_index+1]] = 1
+  if b_index + 1 > len(source):
+    features['b_+1_token_'+source[b_index+1]] = 1
+    features['b_+1_pos_'+dependency['pos'][b_index+1]] = 1
+    features['b_+1_cluster_'+clusters[b_index+1]] = 1
+    features['b_+1_coarse_'+dependency['coarse'][b_index+1]] = 1
+    features['b_bigram_'+source[b_index]+'_'+source[b_index+1]] = 1
+  
+
   a_child = 0
   b_child = 0
   for i in range(len(source)):
@@ -182,6 +214,7 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
       features['a_child_'+mod+'_token_'+source[i]] = 1
       features['a_child_'+mod+'_cluster_'+clusters[i]] = 1 
       features['a_child_'+mod+'_pos_'+dependency['pos'][i]] = 1
+      features['a_child_'+mod+'_coarse_'+dependency['coarse'][i]] = 1
       if i < a_index:
         if (a_index-i)==1:
           features['a_child_'+mod+'_immediately_before'] = 1
@@ -199,6 +232,7 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
       features['b_child_'+mod+'_token_'+source[i]] = 1
       features['b_child_'+mod+'_cluster_'+clusters[i]] = 1
       features['b_child_'+mod+'_pos_'+dependency['pos'][i]] = 1
+      features['b_child_'+mod+'_coarse_'+dependency['coarse'][i]] = 1
 
       if i < b_index:
         if (b_index-i)==1:
