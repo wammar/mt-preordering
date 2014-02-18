@@ -44,17 +44,18 @@ task ProcessSource : turboparser
 :: parse_model=$parse_model_hi
 :: fine2coarse=@
 :: preordering_home=@
-< corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
+< corpus=(Corpus: train=$corpus dev=$dev_set)
 > conll_parse
 > tags
 {
   cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $preordering_home/turbotag.py $tag_model $turboparser > $tags
-  cat $tags | $preordering_home/turboparse.py -m $parse_model -t $turboparser --coarse $fine2coarse > $conll_parse
+  cat $tags | $preordering_home/turboparse.py -m $parse_model -t $turboparser --coarse $fine2coarse > conll_parse_nonprojective
+  python $preordering_home/projectivize_trees.py -n conll_parse_nonprojective -p $conll_parse
 }
 
 task ClusterSource
 :: clusterize=@
-< corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
+< corpus=(Corpus: train=$corpus dev=$dev_set)
 < cluster_paths=$cluster_path_hi
 > cluster_source
 {
@@ -144,10 +145,11 @@ task GizaAlignT2S
 }
 
 task InducePairwiseReordering
- :: corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
+ :: corpus=(Corpus: train=$corpus dev=$dev_set)
  :: preordering_home=@
- :: test=(Corpus: train="" dev="-t" test="-t")
- < parses=(Corpus: train=$parses dev=$conll_parse@ProcessSource[Corpus:dev] test=$conll_parse@ProcessSource[Corpus:test]) 
+ :: test=(Corpus: train="" dev="-t")
+ < parses=(Corpus: train=$conll_parse@ProcessSource[Corpus:train] 
+                   dev=$conll_parse@ProcessSource[Corpus:dev]) 
  < alignment=$alignment@Symmetrize
  > reorderings
 {
@@ -163,8 +165,9 @@ task ExtractDeletionFeatures
  :: cdec_dir=@
  < cluster_source=@ClusterSource
 # < training
- < parses=(Corpus: train=$parses dev=$conll_parse@ProcessSource[Corpus:dev] test=$conll_parse@ProcessSource[Corpus:test])
- < corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
+ < parses=(Corpus:  train=$conll_parse@ProcessSource[Corpus:train] 
+                    dev=$conll_parse@ProcessSource[Corpus:dev])
+ < corpus=(Corpus: train=$corpus dev=$dev_set)
  > features
  > responses
  > log {
@@ -175,19 +178,19 @@ task ExtractDeletionFeatures
 
 task ExtractLeftRightClassifierFeatures
  :: preordering_home=@
- :: test=(Test: no='' yes='--test')
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
  < cluster_source=@ClusterSource
  < training=$reorderings@InducePairwiseReordering
- < parses=(Corpus: train=$parses dev=$conll_parse@ProcessSource[Corpus:dev] test=$conll_parse@ProcessSource[Corpus:test])
+ < parses=(Corpus:  train=$conll_parse@ProcessSource[Corpus:train] 
+                    dev=$conll_parse@ProcessSource[Corpus:dev])
  < corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
  > features
  > responses
  > log 
 {
   $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
-  python $preordering_home/extract_features.py $add_relation $test -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
+  python $preordering_home/extract_features.py $add_relation -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
   rm source
 }
 
@@ -211,26 +214,20 @@ task ReorderSourceSentences
   :: l1=@
   :: l2=@
   :: dev_set=@
-#  :: test_set=@
   :: cdec_dir=@
   :: preordering_home=@
   :: creg_bin=@
   :: wammar_utils_dir=@
   :: corpus=@
-  :: train_parses=$parses
+  :: train_parses=$conll_parse@ProcessSource[Corpus:train]
   < dev_word_pairs=$reorderings@InducePairwiseReordering[Corpus:dev]
   < dev_features=$features@ExtractLeftRightClassifierFeatures[Corpus:dev]
   < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
-#  < test_word_pairs=$reorderings@InducePairwiseReordering[Corpus:test]
-#  < test_features=$features@ExtractLeftRightClassifierFeatures[Corpus:test]
-#  < test_parses=$conll_parse@ProcessSource[Corpus:test]
   < train_word_pairs_partial_order=$reorderings@InducePairwiseReordering[Corpus:train]
   < train_features=$features@ExtractLeftRightClassifierFeatures[Corpus:train]
   < train_responses=$responses@ExtractLeftRightClassifierFeatures[Corpus:train]
   > dev_reordered
   > dev_reordered_indexes
-#  > test_reordered
-#  > test_reordered_indexes
   > train_reordered
   > train_reordered_indexes
   > model
@@ -257,15 +254,10 @@ task ReorderSourceSentences
   python $preordering_home/reorder_src_sents.py -p $dev_parses -s dev_source -w dev_word_pairs_partial_order -o dev_reordered_source -oi $dev_reordered_indexes
   python $wammar_utils_dir/paste.py -i dev_reordered_source dev_target -o $dev_reordered -d " ||| "
 
-#  # reordering src side of test data
-#  $cdec_dir/corpus/cut-corpus.pl 1 $test_set > test_source
-#  $cdec_dir/corpus/cut-corpus.pl 2 $test_set > test_target
-#  python $preordering_home/reorder_src_sents.py -p $test_parses -s test_source -w test_word_pairs_partial_order -o test_reordered_source -oi $test_reordered_indexes
-#  python $wammar_utils_dir/paste.py -i test_reordered_source test_target -o $test_reordered
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Test: no) * (Aligner: fast) * (L1: point_one) * (L2: zero)
+  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_one) * (L2: zero)
 }
 
 plan cluster {
