@@ -16,10 +16,10 @@ args = argParser.parse_args()
 nonprojective_file = io.open(args.nonprojective_filename, encoding='utf8')
 projective_file = io.open(args.projective_filename, encoding='utf8', mode='w')
 
-def get_nonprojective_arc(gap_to_arcs, tokens_count):
+def get_nonprojective_arc(gap_to_arcs, child_parent_map):
   old_arcs = set()
   shortest_bad_arc = None
-  for gap in range(1, tokens_count):
+  for gap in range(1, len(child_parent_map)):
     if gap not in gap_to_arcs: continue
     for new_arc in gap_to_arcs[gap]:
       new_child, new_parent = new_arc
@@ -37,12 +37,16 @@ def get_nonprojective_arc(gap_to_arcs, tokens_count):
         # and the other old member is strictly outside the new arc, 
         # then we have a projectivity-breaking arc pair
         if inside == 1 and outside == 1:
-          # the old arc is smaller, so we return it
+          # we never raise an arc when parent = root. so, if the old arc has a root, raise the new arc instead
+          if child_parent_map[old_parent] < 0:
+            old_child, old_parent = new_child, new_parent
+          # if the bad arc here has a smaller gap, than the shortest bad arc encountered, use it
           if not shortest_bad_arc or \
                 abs(old_child-old_parent) < abs(shortest_bad_arc[0]-shortest_bad_arc[1]):
             shortest_bad_arc = (old_child, old_parent,)
       old_arcs.add( new_arc )
 
+  print 'shortest_bad_arc = ', shortest_bad_arc
   return shortest_bad_arc
   
 projective_parses=0
@@ -60,7 +64,7 @@ while True:
   tokens = []
 
   end_of_file = False
-  root_found = False
+  root = -1
   while True:
     conll_line += 1
     line = nonprojective_file.readline()
@@ -75,17 +79,18 @@ while True:
       break
     child_position, child_string, whatever1, child_fine_pos, child_coarse_pos, whatever2, parent_position, dependency_relation = int(conll_fields[0])-1, conll_fields[1], conll_fields[2], conll_fields[3], conll_fields[4], conll_fields[5], int(conll_fields[6])-1, conll_fields[7]
 
+    # if this is root
     if parent_position == -1:
-      if not root_found:
-        root_found = True
+      # and it's the first root found in this parse
+      if root == -1:
+        # designate it as THE root
+        root = child_position
+      # but if someone else claimed this position before
       else:
+        # defer to the one who claimed it earlier
+        parent_position = root
+        tokens[child_position][6] = str(root+1)
         
-      parent2children[parent_position].append(child_position)
-      child2parent[child_position] = parent_position
-    else:
-      if root != -1: several_roots = True
-      root = child_position
-
     # increase the gap between the root and a direct child
     if parent_position == -1:
       parent_position = -1000
@@ -93,14 +98,14 @@ while True:
     # save the parse
     parent_children_map[parent_position].append(child_position)
     child_parent_map[child_position] = parent_position
-    gap_to_arcs[abs(child_position-parent_position)].add( (child_position, parent_position,) )
+    gap_to_arcs[abs(child_position - parent_position)].add( (child_position, parent_position,) )
 
   if end_of_file:
     break
 
   attempts = 0
   while True:
-    bad_arc = get_nonprojective_arc(gap_to_arcs, len(child_parent_map))
+    bad_arc = get_nonprojective_arc(gap_to_arcs, child_parent_map)
     if not bad_arc: 
       if attempts == 0:
         projective_parses += 1
@@ -118,14 +123,14 @@ while True:
     gap_to_arcs[abs(child-better_parent)].add(better_arc)
     child_parent_map[child] = better_parent
     if better_parent < 0:
-      tokens[child][6] = u'0' #root
+      assert False
     else:
       tokens[child][6] = str(better_parent + 1)
     tokens[child][7] = 'raised'
 
   for token in tokens:
     projective_file.write(u'{}\n'.format('\t'.join(token)))
-  projective_file.write(u'\n')
+  #projective_file.write(u'\n')
 
 print 'projective_parses = ', projective_parses  
 print 'nonprojective_parses = ', nonprojective_parses  
