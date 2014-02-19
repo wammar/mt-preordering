@@ -41,7 +41,7 @@ def parse(line):
           stag = pos_map[tag]
         else:
           unknown_tags += 1
-          sys.stderr.write('{} does not have coarse mapping'.format(tag)) 
+          #sys.stderr.write('{} does not have coarse mapping'.format(tag)) 
         parser.stdin.write('{}\t{}\t_\t{}\t{}\t_\t_\t_\n'.format(i, word, stag, tag))
     parser.stdin.write('\n')
     parser.stdin.flush()

@@ -184,7 +184,7 @@ task ExtractLeftRightClassifierFeatures
  < training=$reorderings@InducePairwiseReordering
  < parses=(Corpus:  train=$conll_parse@ProcessSource[Corpus:train] 
                     dev=$conll_parse@ProcessSource[Corpus:dev])
- < corpus=(Corpus: train=$corpus dev=$dev_set test=$test_set)
+ < corpus=(Corpus: train=$corpus dev=$dev_set)
  > features
  > responses
  > log 
@@ -219,7 +219,7 @@ task ReorderSourceSentences
   :: creg_bin=@
   :: wammar_utils_dir=@
   :: corpus=@
-  :: train_parses=$conll_parse@ProcessSource[Corpus:train]
+  < train_parses=$conll_parse@ProcessSource[Corpus:train]
   < dev_word_pairs=$reorderings@InducePairwiseReordering[Corpus:dev]
   < dev_features=$features@ExtractLeftRightClassifierFeatures[Corpus:dev]
   < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
@@ -236,7 +236,7 @@ task ReorderSourceSentences
   $creg_bin -x $train_features -y $train_responses --l1 $l1 --l2 $l2 --z $model -e 0.1 -d 0.00001
 
   # classifying candidate word pairs
-  $creg_bin --tx $dev_features -w $model -p --z temp_model > ids_responses
+  $creg_bin --tx $dev_features -w $model -p -W > ids_responses
   # then gluing the prediction in the "reversed \t sent_id \t first_word \t second_word" format
   python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i $dev_word_pairs -o auto_responses sent_ids first_positions second_positions
   python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i ids_responses -o ids responses
@@ -265,7 +265,7 @@ plan cluster {
 }
 
 plan test_parser {
-  reach ProcessSource via (Corpus: dev train)
+  reach ProcessSource via (Corpus: dev)
 }
 
 plan Full 

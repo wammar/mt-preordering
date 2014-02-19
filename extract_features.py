@@ -115,8 +115,8 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
     b_parent = dependency['head'][b_index]
     features['b_head_token_'+source[b_parent]] = 1
     features['b_head_cluster_'+clusters[b_parent]] = 1
-    features['b_head_pos_'+dependency['pos'][b_parent]] = 1
-    features['b_head_coarse_'+dependecy['coarse'][b_parent]] = 1
+    features['b_head_pos_'+   dependency['pos'][b_parent]] = 1
+    features['b_head_coarse_'+dependency['coarse'][b_parent]] = 1
     features['b_head_mod_'+dependency['mod'][b_parent]] = 1
     if not dependency['head'][b_parent] < 0:
       b_grand = dependency['head'][b_parent]

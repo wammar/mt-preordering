@@ -61,8 +61,8 @@ sent_ids_with_multiple_roots = []
 sent_ids_with_bad_parses = []
 while True:
   sent_id += 1
-  print '==========================='
-  if sent_id % 1 == 0:
+  if sent_id % 1000 == 0:
+    #print '==========================='
     print 'processing sent_id', sent_id
 
   # read source sentence
@@ -70,7 +70,7 @@ while True:
   if not src_line:
     break
   src_tokens = src_line.strip().split(' ')
-  print src_tokens
+  #print src_tokens
   
   # read all source word pairs partial reorderings for this sentence
   word_pair_order = {}
@@ -83,7 +83,7 @@ while True:
     if sent_id != word_pair_sent_id:
       word_pair_order_file.seek(prev_line_starts_at)
       break
-    print sent_id, 'reverse[', first_position,', ',second_position,']=',reverse
+    #print sent_id, 'reverse[', first_position,', ',second_position,']=',reverse
     word_pair_order[(first_position, second_position,)] = reverse
       
   # reading sentence parse
@@ -127,20 +127,25 @@ while True:
     output_file.write(src_line)
     continue
 
-  print 'word_pair_order = ', word_pair_order
+  #print 'word_pair_order = ', word_pair_order
+  # skip sentences which don't have any flips
+  if len( [word_pair for word_pair in word_pair_order.keys() if word_pair_order[word_pair] ] ) == 0:
+    reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(i) for i in xrange(len(src_tokens))])))
+    output_file.write(src_line)
+    continue
 
   # now we do one postorder traversal of all nodes in the dependency tree. while visiting a node X, we determine a complete order for the members of the family rooted at X (i.e. X and its direct children), based on partial reorderings between pairs of those members.
   parent2order=defaultdict(list)
   postorder_traverse(root, order_family)
-  print 'parent2order=',parent2order
+  #print 'parent2order=',parent2order
   
   # then, we repeatedly replace every parent with a complete ordering of its family
   complete_order = [root]
   while len(complete_order) < len(src_tokens):
-    print 'complete_order=',complete_order
+    #print 'complete_order=',complete_order
     #print 'len(complete_order) = ', len(complete_order)
     expandables = [parent for parent in complete_order if parent in parent2children]
-    print 'expandables = ', expandables
+    #print 'expandables = ', expandables
     for expandable in expandables:
       expandable_index = complete_order.index(expandable)
       #print 'now expanding the parent ', expandable, ' which has index ', expandable_index, ' in compete_order list'
@@ -151,7 +156,7 @@ while True:
       del parent2children[expandable]
 
   # we are done!
-  print complete_order
+  #print complete_order
   # write the reordered indexes to file
   reordered_indexes_file.write(u'{}\n'.format(' '.join( [str(position) for position in complete_order] )))
   # replace each index with the actual source word

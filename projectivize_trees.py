@@ -19,8 +19,7 @@ projective_file = io.open(args.projective_filename, encoding='utf8', mode='w')
 def get_nonprojective_arc(gap_to_arcs, child_parent_map):
   old_arcs = set()
   shortest_bad_arc = None
-  for gap in range(1, len(child_parent_map)):
-    if gap not in gap_to_arcs: continue
+  for gap in sorted(gap_to_arcs.keys()):
     for new_arc in gap_to_arcs[gap]:
       new_child, new_parent = new_arc
       for (old_child, old_parent,) in old_arcs:
@@ -46,7 +45,7 @@ def get_nonprojective_arc(gap_to_arcs, child_parent_map):
             shortest_bad_arc = (old_child, old_parent,)
       old_arcs.add( new_arc )
 
-  print 'shortest_bad_arc = ', shortest_bad_arc
+  #print 'shortest_bad_arc = ', shortest_bad_arc
   return shortest_bad_arc
   
 projective_parses=0
