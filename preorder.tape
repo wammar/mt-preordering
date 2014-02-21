@@ -257,19 +257,18 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_one) * (L2: zero)
+  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect)
 }
 
 plan cluster {
-  reach ClusterSource via (Corpus: dev)
+  reach ClusterSource via (Corpus: dev) * (SymHeuristic: intersect)
 }
 
 plan test_parser {
-  reach ProcessSource via (Corpus: dev)
+  reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect)
 }
 
 plan Full 
 {
-  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) * (L1: point_one) * (L2: zero)
+  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect)
 }
-

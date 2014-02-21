@@ -15,8 +15,23 @@ argParser.add_argument("-o", "--output_filename",
                        help="Output pairwise preordering training data.")
 argParser.add_argument('-t', '--test', action='store_true',
                        help='Find all reorderings potentially needed at test time. No alignments file needed. the responses column in output is always 0.')
-
 args = argParser.parse_args()
+
+def construct_yield(root_position, parent2children, parent2yield):
+  for child in parent2children[root_position]:
+    assert len(parent2yield[root_position] & parent2yield[child]) == 0
+    parent2yield[root_position].update(  parent2yield[child]  )
+
+def postorder_traverse(root_position, visit_function, parent2children, parent2yield):
+  parent2yield[root_position].add(root_position)
+  # base case
+  if root_position not in parent2children:
+    return
+  # recurse
+  for child_position in parent2children[root_position]:
+    postorder_traverse(child_position, visit_function, parent2children, parent2yield)
+  # visit
+  visit_function(root_position, parent2children, parent2yield)
 
 parses_file=io.open(args.parses_filename, encoding='utf8')
 if args.test: align_file = None
@@ -30,13 +45,13 @@ conll_line = -1
 while True:
   sent_id += 1
   # reading word alignment
+  src2tgt_alignments, tgt2src_alignments = defaultdict(set), defaultdict(set)
   if not args.test:
     sent_align = align_file.readline()
     if not sent_align:
       break
     max_src_position = 0
     src_tgt_pairs = sent_align.split()
-    src2tgt_alignments, tgt2src_alignments = defaultdict(set), defaultdict(set)
     for i in xrange(len(src_tgt_pairs)):
       src_position, tgt_position = src_tgt_pairs[i].split('-')
       src2tgt_alignments[int(src_position)].add(int(tgt_position))
@@ -50,6 +65,7 @@ while True:
   max_child_position = 0
   length_of_pcm=0
   end_of_file = False
+  root = -1
   while True:
     conll_line += 1
     line = parses_file.readline()
@@ -65,7 +81,11 @@ while True:
     max_child_position = child_position
     parent_children_map[parent_position].append(child_position)
     # add parent-child word pair to the family, unless this is root
-    if parent_position == -1: continue
+    if parent_position == -1: 
+      # otherwise, the parse has multiple roots
+      assert root == -1
+      root = child_position
+      continue
     src_family_word_pairs.append( ( min(child_position, parent_position), 
                                     max(child_position, parent_position),) )
   
@@ -92,31 +112,44 @@ while True:
     continue
 
   # skip sentences which have fewer than 5 src words
-  if max_child_position < min_src_sent_length-1:
+  if not args.test and max_child_position < min_src_sent_length-1:
     continue
+
+  # find the yield of each parent
+  parent_yield_map = defaultdict(set)
+  postorder_traverse(root, construct_yield, parent_children_map, parent_yield_map)
+  # find the target alignments for each yield
+  yield2tgt_alignments = defaultdict(set)
+  for parent in parent_yield_map.keys():
+    for node in parent_yield_map[parent]:
+      yield2tgt_alignments[parent].update( src2tgt_alignments[node] )
 
   # now that we captured all src word pairs that belong to the same family according to the depparse, 
   # it's time to find out how they should be reordered, based on word alignments to the target side
   for src_word_pair in src_family_word_pairs:
-    assert( src_word_pair[0] < src_word_pair[1] )
+    a, b = src_word_pair[0], src_word_pair[1]
+    assert( a < b )
     if args.test:
-      reversed = 0
+      reverse, monotonic = False, False
     else:
-      # first, skip the pairs where one of the source words don't align to anything in the target
-      if len(src2tgt_alignments[src_word_pair[0]]) == 0 or \
-            len(src2tgt_alignments[src_word_pair[1]]) == 0:
-        continue
       # then, determine whether all mappings of the first src word are strictly smaller than the mappings of the second src word
-      monotonic = max(src2tgt_alignments[src_word_pair[0]]) < min(src2tgt_alignments[src_word_pair[1]])
-      # then, determine whether all mappings of the first src word are strictly larger than the mappings of the second src word
-      reversed = min(src2tgt_alignments[src_word_pair[0]]) > max(src2tgt_alignments[src_word_pair[1]])
-      # if the word alignments don't induce a monotonic reordering, and don't induce a reversed reordering, skip this pair
-      if not monotonic and not reversed: continue
-    
-      if reversed: reversed = 1
-      else: reversed = 0
+      # Unlike (Lerner and Petrov, 2013), we use the union of alignments of a child's yield
+      a_alignments = yield2tgt_alignments[a] if b not in parent_children_map[a] else src2tgt_alignments[a]
+      b_alignments = yield2tgt_alignments[b] if a not in parent_children_map[b] else src2tgt_alignments[b]
+      monotonic =  len(src2tgt_alignments[a]) > 0 and len(src2tgt_alignments[b]) > 0 and \
+          max(a_alignments) < min(b_alignments)
+      # determine whether all mappings of the first src word are strictly larger than the mappings of the second src word
+      reverse = len(src2tgt_alignments[a]) > 0 and len(src2tgt_alignments[b]) > 0 and \
+          min(a_alignments) > max(b_alignments)
 
-    # now, it's time to write this word pair and its word-alignment-induced reordering (if available) to the output file
-    output_file.write(u'{}\t{}\t{}\t{}\n'.format(reversed, sent_id, src_word_pair[0], src_word_pair[1]))
+    # write the induced reordering
+    if monotonic and not reverse:
+      output_file.write(u'{}\t{}\t{}\t{}\n'.format(0, sent_id, a, b))
+    elif not monotonic and reverse:
+      output_file.write(u'{}\t{}\t{}\t{}\n'.format(1, sent_id, a, b))
+    # unlike Lerner and Petrov (2013), we extract all pairwise examples, 
+    #even if there is no strict ordering implied by word alignments
+    else:
+      output_file.write(u'{}\t{}\t{}\t{}\n'.format(0, sent_id, a, b))
 
 output_file.close()
