@@ -47,6 +47,8 @@ def get_nonprojective_arc(gap_to_arcs, child_parent_map):
 
   #print 'shortest_bad_arc = ', shortest_bad_arc
   return shortest_bad_arc
+
+PRESUMED_ROOT_POSITION = -1000
   
 projective_parses=0
 nonprojective_parses=0
@@ -82,17 +84,25 @@ while True:
     if parent_position == -1:
       # and it's the first root found in this parse
       if root == -1:
-        # designate it as THE root
+        # designate it as a root
         root = child_position
-      # but if someone else claimed this position before
+      # but if someone else claims to be  a root
       else:
-        # defer to the one who claimed it earlier
-        parent_position = root
-        tokens[child_position][6] = str(root+1)
+        # remember who it is
+        old_root = root
+        # designate yourself as root
+        root = child_position
+        # make the old_root a direct dependent on you
+        parent_children_map[PRESUMED_ROOT_POSITION].remove(old_root)
+        parent_children_map[root].append(old_root)
+        child_parent_map[old_root] = root
+        gap_to_arcs[abs(old_root - (PRESUMED_ROOT_POSITION))].remove( (old_root, PRESUMED_ROOT_POSITION,) )
+        gap_to_arcs[abs(old_root - root)].add( (old_root, root,) )
+        tokens[old_root][6] = str(root+1)
         
     # increase the gap between the root and a direct child
     if parent_position == -1:
-      parent_position = -1000
+      parent_position = PRESUMED_ROOT_POSITION
 
     # save the parse
     parent_children_map[parent_position].append(child_position)

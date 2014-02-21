@@ -147,13 +147,20 @@ task GizaAlignT2S
 task InducePairwiseReordering
  :: corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
  :: preordering_home=@
- :: test=(Corpus: train="" dev="-t")
+ :: use_alignments=(Corpus: train=yes dev=no)
  < parses=(Corpus: train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                    dev=$conll_parse@ProcessSource[Corpus:dev]) 
  < alignment=$alignment@Symmetrize
  > reorderings
+ > potentials
 {
-  python $preordering_home/induce_pairwise_reordering.py $test -a $alignment -p $parses -o $reorderings
+  if [[ $use_alignments == no ]]; then
+    echo "i'm not going to use alignments"
+    python $preordering_home/induce_pairwise_reordering.py -p $parses -ir $reorderings -pr $potentials
+  else
+    echo "i'm going to use alignments"
+    python $preordering_home/induce_pairwise_reordering.py  -a $alignment -p $parses -ir $reorderings -pr $potentials
+  fi
 }
 
 task Evaluate
@@ -181,7 +188,8 @@ task ExtractLeftRightClassifierFeatures
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
  < cluster_source=@ClusterSource
- < training=$reorderings@InducePairwiseReordering
+ < training=(Corpus: train=$reorderings@InducePairwiseReordering[Corpus:train]
+                     dev=$potentials@InducePairwiseReordering[Corpus:dev])
  < parses=(Corpus:  train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                     dev=$conll_parse@ProcessSource[Corpus:dev])
  < corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
@@ -221,10 +229,11 @@ task ReorderSourceSentences
   :: corpus=(Language: hi=$corpus de=$corpus_de)
   < train_parses=(Language: hi=$conll_parse@ProcessSource[Corpus:train]
                             de=$parses_de)
-  < dev_word_pairs=$reorderings@InducePairwiseReordering[Corpus:dev]
+  < dev_word_pairs=$potentials@InducePairwiseReordering[Corpus:dev]
   < dev_features=$features@ExtractLeftRightClassifierFeatures[Corpus:dev]
   < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
   < train_word_pairs_partial_order=$reorderings@InducePairwiseReordering[Corpus:train]
+  < train_potentials=$potentials@InducePairwiseReordering[Corpus:train]
   < train_features=$features@ExtractLeftRightClassifierFeatures[Corpus:train]
   < train_responses=$responses@ExtractLeftRightClassifierFeatures[Corpus:train]
   > dev_reordered
@@ -246,7 +255,7 @@ task ReorderSourceSentences
   # reordering src side of train data
   $cdec_dir/corpus/cut-corpus.pl 1 $corpus > train_source
   $cdec_dir/corpus/cut-corpus.pl 2 $corpus > train_target
-  python $preordering_home/reorder_src_sents.py -p $train_parses -s train_source -w $train_word_pairs_partial_order -o train_reordered_source -oi $train_reordered_indexes
+  python $preordering_home/reorder_src_sents.py -p $train_parses -s train_source -w $train_potentials -o train_reordered_source -oi $train_reordered_indexes
   python $wammar_utils_dir/paste.py -i train_reordered_source train_target -o $train_reordered -d " ||| "
 
   # reordering src side of dev data
@@ -258,7 +267,7 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect) * (Language: de)
+  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)
 }
 
 plan cluster {
