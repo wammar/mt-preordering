@@ -40,11 +40,11 @@ package turboparser :: .versioner=git .repo="https://github.com/andre-martins/Tu
 
 task ProcessSource : turboparser
 :: cdec_dir=@
-:: tag_model=$tag_model_hi
-:: parse_model=$parse_model_hi
-:: fine2coarse=@
+:: tag_model=(Language: hi=$tag_model_hi de=$tag_model_de)
+:: parse_model=(Language: hi=$parse_model_hi de=$tag_model_de)
+:: fine2coarse=(Language: hi=$fine2coarse de=$de_negra_map)
 :: preordering_home=@
-< corpus=(Corpus: train=$corpus dev=$dev_set)
+< corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
 > conll_parse
 > tags
 {
@@ -55,8 +55,8 @@ task ProcessSource : turboparser
 
 task ClusterSource
 :: clusterize=@
-< corpus=(Corpus: train=$corpus dev=$dev_set)
-< cluster_paths=$cluster_path_hi
+< corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
+< cluster_paths=(Language: hi=$cluster_path_hi de=$cluster_path_de)
 > cluster_source
 {
   cat $corpus | $clusterize $cluster_paths > $cluster_source
@@ -64,7 +64,7 @@ task ClusterSource
 
 task FastAlignS2T
     > alignment
-    :: corpus=@
+    :: corpus=(Language: hi=$corpus de=$corpus_de)
     :: cdec_dir=@
     #:: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared 
 {
@@ -73,7 +73,7 @@ task FastAlignS2T
 
 task FastAlignT2S
     > alignment
-    :: corpus=@
+    :: corpus=(Language: hi=$corpus de=$corpus_de)
     :: cdec_dir=@
    # :: .submitter=torque_shared .walltime="12:00:00" .cpus=1 .vmem=32g .q=shared
  {
@@ -145,10 +145,10 @@ task GizaAlignT2S
 }
 
 task InducePairwiseReordering
- :: corpus=(Corpus: train=$corpus dev=$dev_set)
+ :: corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
  :: preordering_home=@
  :: test=(Corpus: train="" dev="-t")
- < parses=(Corpus: train=$conll_parse@ProcessSource[Corpus:train] 
+ < parses=(Corpus: train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                    dev=$conll_parse@ProcessSource[Corpus:dev]) 
  < alignment=$alignment@Symmetrize
  > reorderings
@@ -165,9 +165,9 @@ task ExtractDeletionFeatures
  :: cdec_dir=@
  < cluster_source=@ClusterSource
 # < training
- < parses=(Corpus:  train=$conll_parse@ProcessSource[Corpus:train] 
+ < parses=(Corpus:  train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                     dev=$conll_parse@ProcessSource[Corpus:dev])
- < corpus=(Corpus: train=$corpus dev=$dev_set)
+ < corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
  > features
  > responses
  > log {
@@ -182,9 +182,9 @@ task ExtractLeftRightClassifierFeatures
  :: cdec_dir=@
  < cluster_source=@ClusterSource
  < training=$reorderings@InducePairwiseReordering
- < parses=(Corpus:  train=$conll_parse@ProcessSource[Corpus:train] 
+ < parses=(Corpus:  train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                     dev=$conll_parse@ProcessSource[Corpus:dev])
- < corpus=(Corpus: train=$corpus dev=$dev_set)
+ < corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
  > features
  > responses
  > log 
@@ -218,8 +218,9 @@ task ReorderSourceSentences
   :: preordering_home=@
   :: creg_bin=@
   :: wammar_utils_dir=@
-  :: corpus=@
-  < train_parses=$conll_parse@ProcessSource[Corpus:train]
+  :: corpus=(Language: hi=$corpus de=$corpus_de)
+  < train_parses=(Language: hi=$conll_parse@ProcessSource[Corpus:train]
+                            de=$parses_de)
   < dev_word_pairs=$reorderings@InducePairwiseReordering[Corpus:dev]
   < dev_features=$features@ExtractLeftRightClassifierFeatures[Corpus:dev]
   < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
@@ -257,18 +258,18 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect)
+  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect) * (Language: de)
 }
 
 plan cluster {
-  reach ClusterSource via (Corpus: dev) * (SymHeuristic: intersect)
+  reach ClusterSource via (Corpus: dev) * (SymHeuristic: intersect) * (Language: de)
 }
 
 plan test_parser {
-  reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect)
+  reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect) * (Language: de)
 }
 
 plan Full 
 {
-  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect)
+  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)
 }

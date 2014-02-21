@@ -5,13 +5,14 @@ global {
   cores=16
   preordering_home="/usr0/home/wammar/mt-preordering/"
   #preordering_home="/usr2/home/eschling/wmt/mt-preordering/" 
-  #parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
+  parses="/usr0/home/wammar/mt-preordering/wmt_test.output.conll"
   #parses="/usr2/home/sswayamd/wmt/wmt_test.output.conll"
-  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp004/"
-  #ducttape_output="/usr2/home/eschling/mt-preordering/hi-en-exp000/"
+  ducttape_output="/usr2/home/wammar/mt-preordering/hi-en-exp003/"
+  #ducttape_output="/usr2/home/eschling/wmt/mt-preordering/exp000/"
   fine2coarse="/usr2/home/eschling/wmt/mt-preordering/fine2coarse" 
   src="hi"
   tgt="en"
+  src_de="de"
 
   # data
   corpus="/usr1/home/wammar/parallel/training/parallel.hi-en"
@@ -21,6 +22,16 @@ global {
   cluster_path_hi="/usr1/home/eschling/wmt/paths-hi.gz"
   tag_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_tagger_full.model"
   parse_model_hi="/usr2/home/sswayamd/wmt/TurboParser-2.1.0/models/hindi_parser_full.model"
+
+  #german data
+  cluster_path_de="/usr1/home/eschling/wmt/paths-de.gz"
+  parses_de="/usr1/home/eschling/wmt/parsed_parallel.de-en.conll"
+  tag_model_de="/usr0/home/wfeely/german_tagger.model"
+  parse_model_de="/usr0/home/cdyer/german_turbo_parser/models_to_chris/german_parser_pruned-true_model-full.model"
+  corpus_de="/usr1/home/eschling/wmt/parallel.de-en"
+  dev_de="/usr1/home/eschling/wmt/dev.de-en"
+  test_de="/usr1/home/eschling/wmt/devtest.de-en"
+  de_negra_map="/usr2/home/eschling/wmt/mt-preordering/de-negra.map"
 
   # tools
   giza_bin="/opt/tools/mgizapp-0.7.2/bin"
