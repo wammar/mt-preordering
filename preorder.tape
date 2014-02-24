@@ -6,6 +6,10 @@ global {
   ducttape_experimental_packages=true
 
   # options
+  stage_one_only=(StageOneOnly:
+                      no=""
+                      yes="--parent_child_only")
+
   sym_heuristic=(SymHeuristic:
                       grow_diag_final_and="grow-diag-final-and"
                       grow_diag_final="grow-diag-final"
@@ -147,6 +151,7 @@ task GizaAlignT2S
 task InducePairwiseReordering
  :: corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
  :: preordering_home=@
+ :: stage_one_only=@
  :: use_alignments=(Corpus: train=yes dev=no)
  < parses=(Corpus: train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                    dev=$conll_parse@ProcessSource[Corpus:dev]) 
@@ -156,10 +161,10 @@ task InducePairwiseReordering
 {
   if [[ $use_alignments == no ]]; then
     echo "i'm not going to use alignments"
-    python $preordering_home/induce_pairwise_reordering.py -p $parses -ir $reorderings -pr $potentials
+    python $preordering_home/induce_pairwise_reordering.py $stage_one_only -p $parses -ir $reorderings -pr $potentials
   else
     echo "i'm going to use alignments"
-    python $preordering_home/induce_pairwise_reordering.py  -a $alignment -p $parses -ir $reorderings -pr $potentials
+    python $preordering_home/induce_pairwise_reordering.py $stage_one_only -a $alignment -p $parses -ir $reorderings -pr $potentials
   fi
 }
 
@@ -171,7 +176,6 @@ task ExtractDeletionFeatures
  :: preordering_home=@
  :: cdec_dir=@
  < cluster_source=@ClusterSource
-# < training
  < parses=(Corpus:  train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                     dev=$conll_parse@ProcessSource[Corpus:dev])
  < corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
@@ -188,7 +192,8 @@ task ExtractLeftRightClassifierFeatures
  :: add_relation=(RelationFeatures: yes='--extra' no='')
  :: cdec_dir=@
  < cluster_source=@ClusterSource
- < training=(Corpus: train=$reorderings@InducePairwiseReordering[Corpus:train]
+ < training=(Corpus: train=(Potentials: no=$reorderings@InducePairwiseReordering[Corpus:train]
+                                        yes=$potentials@InducePairwiseReordering[Corpus:train])
                      dev=$potentials@InducePairwiseReordering[Corpus:dev])
  < parses=(Corpus:  train=(Language: hi=$conll_parse@ProcessSource[Corpus:train] de=$parses_de)
                     dev=$conll_parse@ProcessSource[Corpus:dev])
@@ -227,47 +232,62 @@ task ReorderSourceSentences
   :: creg_bin=@
   :: wammar_utils_dir=@
   :: corpus=(Language: hi=$corpus de=$corpus_de)
+  :: stage_one_only=@
+  :: cores=@
+    
+  < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
   < train_parses=(Language: hi=$conll_parse@ProcessSource[Corpus:train]
                             de=$parses_de)
+
   < dev_word_pairs=$potentials@InducePairwiseReordering[Corpus:dev]
+  < train_word_pairs=$potentials@InducePairwiseReordering[Corpus:train]
+
   < dev_features=$features@ExtractLeftRightClassifierFeatures[Corpus:dev]
-  < dev_parses=$conll_parse@ProcessSource[Corpus:dev]
-  < train_word_pairs_partial_order=$reorderings@InducePairwiseReordering[Corpus:train]
-  < train_potentials=$potentials@InducePairwiseReordering[Corpus:train]
-  < train_features=$features@ExtractLeftRightClassifierFeatures[Corpus:train]
-  < train_responses=$responses@ExtractLeftRightClassifierFeatures[Corpus:train]
+  < train_features=$features@ExtractLeftRightClassifierFeatures[Corpus:train,Potentials:yes]
+
   > dev_reordered
-  > dev_reordered_indexes
   > train_reordered
+
+  > dev_reordered_indexes
   > train_reordered_indexes
+
+  < limited_train_features=$features@ExtractLeftRightClassifierFeatures[Corpus:train,Potentials:no]
+  < limited_train_responses=$responses@ExtractLeftRightClassifierFeatures[Corpus:train,Potentials:no]
   > model
 {
   # train partial reordering classifier
-  $creg_bin -x $train_features -y $train_responses --l1 $l1 --l2 $l2 --z $model -e 0.1 -d 0.00001
+  $creg_bin -x $limited_train_features -y $limited_train_responses --l1 $l1 --l2 $l2 --z $model -e 0.1 -d 0.00001
 
   # classifying candidate word pairs
-  $creg_bin --tx $dev_features -w $model -p -W > ids_responses
+  $creg_bin --tx $dev_features -w $model -p -W > dev_ids_responses
   # then gluing the prediction in the "reversed \t sent_id \t first_word \t second_word" format
   python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i $dev_word_pairs -o auto_responses sent_ids first_positions second_positions
-  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i ids_responses -o ids responses
-  python $wammar_utils_dir/paste.py -i responses sent_ids first_positions second_positions -o dev_word_pairs_partial_order
-
-  # reordering src side of train data
-  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > train_source
-  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > train_target
-  python $preordering_home/reorder_src_sents.py -p $train_parses -s train_source -w $train_potentials -o train_reordered_source -oi $train_reordered_indexes
-  python $wammar_utils_dir/paste.py -i train_reordered_source train_target -o $train_reordered -d " ||| "
+  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i dev_ids_responses -o dev_ids dev_responses
+  python $wammar_utils_dir/paste.py -i dev_responses sent_ids first_positions second_positions -o dev_word_pairs_partial_order
 
   # reordering src side of dev data
   $cdec_dir/corpus/cut-corpus.pl 1 $dev_set > dev_source
   $cdec_dir/corpus/cut-corpus.pl 2 $dev_set > dev_target
-  python $preordering_home/reorder_src_sents.py -p $dev_parses -s dev_source -w dev_word_pairs_partial_order -o dev_reordered_source -oi $dev_reordered_indexes
+  python $preordering_home/reorder_src_sents.py -p $dev_parses -s dev_source -w dev_word_pairs_partial_order -o dev_reordered_source -oi $dev_reordered_indexes -np $cores
   python $wammar_utils_dir/paste.py -i dev_reordered_source dev_target -o $dev_reordered -d " ||| "
+
+  # classifying candidate word pairs
+  $creg_bin --tx $train_features -w $model -p -W > train_ids_responses
+  # then gluing the prediction in the "reversed \t sent_id \t first_word \t second_word" format
+  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i $train_word_pairs -o auto_responses sent_ids first_positions second_positions
+  python $wammar_utils_dir/horizontal-split-parallel-corpus.py -d 'tab' -i train_ids_responses -o train_ids train_responses
+  python $wammar_utils_dir/paste.py -i train_responses sent_ids first_positions second_positions -o train_word_pairs_partial_order
+
+  # reordering src side of train data
+  $cdec_dir/corpus/cut-corpus.pl 1 $corpus > train_source
+  $cdec_dir/corpus/cut-corpus.pl 2 $corpus > train_target
+  python $preordering_home/reorder_src_sents.py $stage_one_only -p $train_parses -s train_source -w train_word_pairs_partial_order -o train_reordered_source -oi $train_reordered_indexes -np $cores 
+  python $wammar_utils_dir/paste.py -i train_reordered_source train_target -o $train_reordered -d " ||| "
 
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Aligner: fast) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)
+  reach TrainLeftRightClassifier via (Aligner: giza) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)  * (StageOneOnly: yes no)
 }
 
 plan cluster {
@@ -280,5 +300,5 @@ plan test_parser {
 
 plan Full 
 {
-  reach ReorderSourceSentences via (Aligner: fast) * (Corpus: dev) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)
+  reach ReorderSourceSentences via (Aligner: giza) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi) * (StageOneOnly:  no yes)
 }

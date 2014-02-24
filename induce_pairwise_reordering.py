@@ -19,6 +19,8 @@ argParser.add_argument("-pr", "--potential_reorderings_filename",
                        help="All potential word pairs which are candidates for reordering, according to a dependency parse. If word alignments are provided, the label reflects the induced alignment, otherwise the label is zero.")
 argParser.add_argument("-ml", "--minimum_sent_length", default=5, type=int, 
                        help="The minimum length of a sentence so that it qualifies for extraction of training examples for the reordering classifier.")
+argParser.add_argument('--parent_child_only', action='store_true',
+                       help='if specified, only reorder child-parent word pairs. right siblings and left siblings each maintain their original order')
 args = argParser.parse_args()
 
 # constructs the yield of a node in the dependency tree as the union of the node itself
@@ -93,6 +95,8 @@ sent_id = -1
 while True:
   sent_id += 1
 
+  #print 'sent_id = ', sent_id
+
   # reading word alignment
   src2tgt_alignments, tgt2src_alignments = defaultdict(set), defaultdict(set)
   if not read_word_alignments(align_file, src2tgt_alignments, tgt2src_alignments):
@@ -106,13 +110,18 @@ while True:
   assert len(parent_children_map[-1]) == 1
   root = parent_children_map[-1][0]
 
+  #print 'parent_children_map = ', parent_children_map
+
   # construct list of word pairs which belong to the same family   
   src_family_word_pairs = []
   for parent_position in parent_children_map.keys():
-    for i in xrange(len(parent_children_map[parent_position])-1):
+    for i in xrange(len(parent_children_map[parent_position])):
       # add parent-child word pair to the family
-      src_family_word_pairs.append( ( min(parent_children_map[parent_position][i], parent_position), 
-                                      max(parent_children_map[parent_position][i], parent_position),) )
+      if parent_position != -1:
+        src_family_word_pairs.append( ( min(parent_children_map[parent_position][i], parent_position), 
+                                        max(parent_children_map[parent_position][i], parent_position),) )
+      if args.parent_child_only:
+        continue
       for j in range(i+1, len(parent_children_map[parent_position])):
         # add child-child word pair to the family
         src_family_word_pairs.append( ( parent_children_map[parent_position][i],
@@ -130,6 +139,9 @@ while True:
 
   # is this sentence good for training the reordering classifier?
   good_sent = good_for_training(tokens, root)
+
+  #print 'good_sent = ', good_sent
+  #print 'len(src_family_word_pairs) = ', len(src_family_word_pairs)
   
   # now that we captured all src word pairs that belong to the same family according to the depparse, 
   # it's time to find out how they should be reordered, based on word alignments to the target side
@@ -153,15 +165,19 @@ while True:
       if good_sent:
         induced_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(0, sent_id, a, b))
       potential_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(0, sent_id, a, b))
+      #print 0, sent_id, a, b
     elif not monotonic and reverse:
       if good_sent: 
         induced_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(1, sent_id, a, b))
       potential_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(1, sent_id, a, b))
+      #print 1, sent_id, a, b
     elif not monotonic and not reverse:
       if good_sent and args.induce_inconsistent_reorderings:
         induced_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(2, sent_id, a, b))
       potential_reorderings_file.write(u'{}\t{}\t{}\t{}\n'.format(2, sent_id, a, b))
+      #print 2, sent_id, a, b
     else:
+      #print 'FAIL'
       assert False
 
 induced_reorderings_file.close()
