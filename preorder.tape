@@ -206,7 +206,7 @@ task ExtractLeftRightClassifierFeatures
  > log 
 {
   $cdec_dir/corpus/cut-corpus.pl 1 $corpus > source
-  python $preordering_home/extract_features.py $add_relation -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
+  python $preordering_home/extract_features.py -s source -d $parses -t $training -f $features -r $responses -c $cluster_source > $log
   rm source
 }
 
@@ -222,8 +222,8 @@ task TrainLeftRightClassifier
  > model
 {
   python $wammar_utils_dir/vertical-split-parallel-corpus.py -ratio 100:1:1 -corpus-src $features -corpus-tgt $responses -train-src $features_train -train-tgt $responses_train -dev-src $features_dev -dev-tgt $responses_dev -test-src $features_test -test-tgt $responses_test
-  $creg_bin -x $features_train -y $responses_train --l1 $l1 --l2 $l2 --tx $features_dev --ty $responses_dev --z $model -d 0.001 -e 0.1 -p
-
+  $creg_bin -x $features_train -y $responses_train --l1 $l1 --l2 $l2 --tx $features_dev --ty $responses_dev --z $model -d 0.001 -e 0.1 -p > predictions
+  analyze_classification_errors.py -g $responses_dev -p prediction
 }
 
 task ReorderSourceSentences
@@ -290,7 +290,7 @@ task ReorderSourceSentences
 }
 
 plan features {
-  reach TrainLeftRightClassifier via (Aligner: giza) * (L1: point_o_one point_one one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)  * (StageOneOnly: yes no)
+  reach TrainLeftRightClassifier via (Aligner: giza) * (L1: one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi)  * (StageOneOnly: yes no)
 }
 
 plan cluster {
@@ -302,7 +302,7 @@ plan test_parser {
 }
 
 plan Full {
-  reach ReorderSourceSentences via (Aligner: giza) * (L1: one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi) * (StageOneOnly:  no)
+  reach ReorderSourceSentences via (Aligner: giza) * (L1: one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi) * (StageOneOnly: no)
 }
 
 plan GermanFull 
