@@ -33,6 +33,9 @@ global {
           point_o_one=0.01
           zero=0)
 
+  src=(Language: hi="hi"
+                 de="de")
+
 }
 
 # clone TurboParser and download trained models for tagging and parsing English
@@ -219,7 +222,7 @@ task TrainLeftRightClassifier
  > model
 {
   python $wammar_utils_dir/vertical-split-parallel-corpus.py -ratio 100:1:1 -corpus-src $features -corpus-tgt $responses -train-src $features_train -train-tgt $responses_train -dev-src $features_dev -dev-tgt $responses_dev -test-src $features_test -test-tgt $responses_test
-  $creg_bin -x $features_train -y $responses_train --l1 $l1 --l2 $l2 --tx $features_dev --ty $responses_dev --z $model -d 0.001 -e 0.1 
+  $creg_bin -x $features_train -y $responses_train --l1 $l1 --l2 $l2 --tx $features_dev --ty $responses_dev --z $model -d 0.001 -e 0.1 -p
 
 }
 
@@ -298,7 +301,11 @@ plan test_parser {
   reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect) * (Language: de)
 }
 
-plan Full 
+plan Full {
+  reach ReorderSourceSentences via (Aligner: giza) * (L1: one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi) * (StageOneOnly:  no)
+}
+
+plan GermanFull 
 {
-  reach ReorderSourceSentences via (Aligner: giza) * (L1: point_one) * (L2: zero) * (SymHeuristic: intersect) * (Language: hi) * (StageOneOnly:  no yes)
+  reach ReorderSourceSentences via (Aligner: giza) * (L1: one) * (L2: zero) * (SymHeuristic: intersect) * (Language: de) * (StageOneOnly:  no)
 }

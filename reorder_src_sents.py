@@ -71,15 +71,21 @@ def postorder_traverse(root_position, visit_function, parent2children, parent2or
 
 # keeps receiving workloads via in_queue and sending output via out_queue, until a workload = None is encountered
 def process_target(in_queue, out_queue):
+  print 'i\'m PID=', os.getpid()
+  sents_counter = -1
   while True:
+    sents_counter += 1
+    if sents_counter % 1000 == 0:
+      print 'pid', os.getpid(), ' reordered ', sents_counter ' sentences'
     # receive next workload
     workload = in_queue.get()
     # stop signal
-    if not workload:
+    if workload == 'stop':
+      sys.stdout.write('in_queue.get()')
       break
     # grasp workload
     (sent_id, root, order_family, word_pair_label, src_tokens, parent2children,) = workload
-    #print 'proc ', os.getpid(), ' is processing sent_id ', sent_id 
+    #print 'proc ', os.getpid(), ' will reorder sent_id ', sent_id 
     # to determine a complete reorder, we do one postorder traversal of all nodes in the dependency tree. while visiting a node X, 
     # we determine a complete order for the members of the family rooted at X (i.e. X and its direct children), 
     # based on partial reorderings between pairs of those members.
@@ -95,7 +101,8 @@ def process_target(in_queue, out_queue):
         del parent2children[expandable]
     # communicate the result
     out_queue.put( (sent_id, complete_order,) )
-  
+    #print 'proc ', os.getpid(), ' done reordering sent_id ', sent_id 
+    
 if __name__ == "__main__":
   # parse/validate arguments
   argParser = argparse.ArgumentParser()
@@ -137,12 +144,12 @@ if __name__ == "__main__":
   sent_ids_with_bad_parses = []
   sent_id_to_process = {}
   sent_id_to_complete_order = {}
+  buffered_word_pair_line = None
   while True:
     sent_id += 1
 
-    if sent_id % 100 == 0:
-      #print '==========================='
-      print 'processing sent_id', sent_id
+    if sent_id % 1000 == 0:
+      print 'extracting workload of sent_id', sent_id
 
     # read source sentence
     src_line = src_file.readline()
@@ -154,13 +161,18 @@ if __name__ == "__main__":
     # read all source word pairs partial reorderings for this sentence
     word_pair_label = {}
     while True:
-      prev_line_starts_at = word_pair_order_file.tell()
-      line = word_pair_order_file.readline()
+      #prev_line_starts_at = word_pair_order_file.tell()
+      if buffered_word_pair_line:
+        line = buffered_word_pair_line
+        buffered_word_pair_line = None
+      else:
+        line = word_pair_order_file.readline()
       if not line: break
       splits = line.strip().split('\t')
       label, word_pair_sent_id, first_position, second_position = int(splits[0]), int(splits[1]), int(splits[2]), int(splits[3])
       if sent_id != word_pair_sent_id:
-        word_pair_order_file.seek(prev_line_starts_at)
+        buffered_word_pair_line = line
+        #word_pair_order_file.seek(prev_line_starts_at)
         break
       #print sent_id, 'label[', first_position,', ',second_position,']=',label
       word_pair_label[(first_position, second_position,)] = label
@@ -211,12 +223,9 @@ if __name__ == "__main__":
     in_queue.put((sent_id, root, order_family, word_pair_label, src_tokens, parent2children,))
 
   # send stop signal
+  print 'master finished putting all workloads in in_queue. waiting for slaves to do the actual reordering.'
   for proc in procs:
-    in_queue.put(None)
-
-  # sync
-  for proc in procs:
-    proc.join()
+    in_queue.put('stop')
 
   # close all input files
   src_file.close()
@@ -224,12 +233,22 @@ if __name__ == "__main__":
   word_pair_order_file.close()
 
   # reorganize the output in a dictionary
-  while not out_queue.empty():
+  print 'reorganizing results'
+  sents_count = sent_id
+  while len(sent_id_to_complete_order) < sents_count:
     (sent_id, complete_order,) = out_queue.get()
     sent_id_to_complete_order[sent_id] = complete_order
 
+  print 'all slaves finished their workloads!'
+
+  # sync
+  for proc in procs:
+    proc.join()
+
+  print 'master & slaves united'
+
   # done with all sentences! time to persist results
-  sents_count = sent_id
+  print 'persisting results'
   src_file = io.open(args.source_filename, encoding='utf8')
   output_file=io.open(args.output_filename, encoding='utf8', mode='w')
   reordered_indexes_file = io.open(args.reordered_indexes_filename, encoding='utf8', mode='w')

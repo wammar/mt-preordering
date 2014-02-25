@@ -70,7 +70,10 @@ def main():
 
     pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo, coarse=args.coarse))
 
-    for sentence, tagged, parsed, conll in pool.imap(parse, sys.stdin, chunksize=args.chunk):
+    for fields in pool.imap(parse, sys.stdin, chunksize=args.chunk):
+        if len(fields) != 4:
+            print fields
+        sentence, tagged, parsed, conll  = fields
         #print('{} ||| {} ||| {}'.format(sentence, tagged, parsed))
         print(conll)
     sys.stderr.write('{} tags without fine to coarse mappings'.format(unknown_tags))
