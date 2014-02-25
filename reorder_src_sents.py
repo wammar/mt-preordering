@@ -76,7 +76,7 @@ def process_target(in_queue, out_queue):
   while True:
     sents_counter += 1
     if sents_counter % 1000 == 0:
-      print 'pid', os.getpid(), ' reordered ', sents_counter ' sentences'
+      print 'pid', os.getpid(), ' reordered ', sents_counter, ' sentences'
     # receive next workload
     workload = in_queue.get()
     # stop signal

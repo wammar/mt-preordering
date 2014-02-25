@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import sys
+import sys, io
 import os
 from itertools import izip
 import subprocess as sp
@@ -12,23 +12,39 @@ os.environ['LD_LIBRARY_PATH'] = '/home/eschling/tools/TurboParser-2.1.0/deps/loc
 
 parser = None
 pos_map = dict()
+lemma_map = dict()
 unknown_tags = 0
-def start_parser(model=MODEL,parser_loc=PARSER, coarse=''):
-    
+def start_parser(model=MODEL,parser_loc=PARSER, coarse='', lemma_filename=''):
+    global lemma_map
+    global pos_map
     global parser
     parser = sp.Popen([parser_loc+'/TurboParser', '--test', '--file_model='+model,
         '--file_test=/dev/stdin', '--file_prediction=/dev/stdout'],
         stdin=sp.PIPE, stdout=sp.PIPE)
+
+    # use coarse pos tag when available
     if coarse:
       fine2coarse = open(coarse)
       for line in fine2coarse:
         fine_pos, coarse_pos = line.strip().split('\t')
         pos_map[fine_pos] = coarse_pos 
+    
+    # use lemmas when available
+    if lemma_filename:
+      lemma_file = open(lemma)
+      for line in lemma_file:
+        splits = line.strip().split('\t')
+        if len(splits) != 2:
+          sys.stderr.write('warning: strange line found in '+ lemma +':\n'+ line)
+          continue
+        token, lemma = splits
+        lemma_map[token] = lemma
 
 def parse(line):
     global parser
     global pos_map
     global unknown_tags
+    global lemma_map
     sentence, tagged = line[:-1].split(' ||| ')
     words = sentence.split()
     tags = tagged.split()
@@ -42,7 +58,8 @@ def parse(line):
         else:
           unknown_tags += 1
           #sys.stderr.write('{} does not have coarse mapping'.format(tag)) 
-        parser.stdin.write('{}\t{}\t_\t{}\t{}\t_\t_\t_\n'.format(i, word, stag, tag))
+        lemma = lemma_map[word] if word in lemma_map else word
+        parser.stdin.write('{}\t{}\t{}\t{}\t{}\t_\t_\t_\n'.format(i, word, lemma, stag, tag))
     parser.stdin.write('\n')
     parser.stdin.flush()
     parse = []
@@ -66,9 +83,10 @@ def main():
     arg_parser.add_argument('-t','--turbo', help='turboparser location')
     arg_parser.add_argument('-m','--model',help='TurboParser model to use', required=False)
     arg_parser.add_argument('--coarse',help='fine to coarse POS tag mapping to use',required=False)
+    arg_parser.add_argument('--lemma',help='token to lemma mapping',required=False)
     args = arg_parser.parse_args()
 
-    pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo, coarse=args.coarse))
+    pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo, coarse=args.coarse, lemma=args.lemma))
 
     for fields in pool.imap(parse, sys.stdin, chunksize=args.chunk):
         if len(fields) != 4:

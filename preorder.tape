@@ -50,13 +50,14 @@ task ProcessSource : turboparser
 :: tag_model=(Language: hi=$tag_model_hi de=$tag_model_de)
 :: parse_model=(Language: hi=$parse_model_hi de=$tag_model_de)
 :: fine2coarse=(Language: hi=$fine2coarse de=$de_negra_map)
+:: word2lemma=(Language: hi=$word2lemma de=$de_word2lemma)
 :: preordering_home=@
 < corpus=(Language: hi=(Corpus: train=$corpus dev=$dev_set) de=(Corpus: train=$corpus_de dev=$dev_de))
 > conll_parse
 > tags
 {
   cat $corpus | $cdec_dir/corpus/cut-corpus.pl 1 | $preordering_home/turbotag.py $tag_model $turboparser > $tags
-  cat $tags | $preordering_home/turboparse.py -m $parse_model -t $turboparser --coarse $fine2coarse > conll_parse_nonprojective
+  cat $tags | $preordering_home/turboparse.py -m $parse_model -t $turboparser --coarse $fine2coarse --lemma $word2lemma > conll_parse_nonprojective
   python $preordering_home/projectivize_trees.py -n conll_parse_nonprojective -p $conll_parse
 }
 
@@ -298,7 +299,7 @@ plan cluster {
 }
 
 plan test_parser {
-  reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect) * (Language: de)
+  reach ProcessSource via (Corpus: dev) * (SymHeuristic: intersect) * (Language: hi)
 }
 
 plan Full {
