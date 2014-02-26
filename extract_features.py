@@ -39,16 +39,21 @@ def main():
       dependency['pos']=[]
       dependency['head']=[]
       dependency['mod']=[]
+      dependency['children']=[ [] for i in xrange(len(source)) ]
       #print source_line, dep_line, a_index, b_index, instance
       parse = dependency_file.readline().strip()
       #print parse.encode('utf8')
       while parse:
         conll = parse.split('\t')
+        index = int(conll[0])-1
         dependency['token'].append(conll[1])
         dependency['coarse'].append(conll[3])
         dependency['pos'].append(conll[4])
-        dependency['head'].append(int(conll[6])-1)
+        head = int(conll[6])-1
+        dependency['head'].append(head)
         dependency['mod'].append(conll[7])
+        if head >= 0:
+          dependency['children'][head].append(index)
         dep_line += 1
         parse = dependency_file.readline().strip()
 
@@ -68,7 +73,24 @@ def main():
     for level in xrange(len(levels)):
       for token_index in levels[level]:
         dependency['level'][token_index] = level
-      
+
+    # find left and right siblings
+    dependency['lsibling'] = []
+    dependency['rsibling'] = []
+    for i in xrange(len(source)):
+      head = dependency['head'][i]
+      index_of_i_among_siblings = dependency['children'][head].index(i) if head >= 0 else 0
+      # first sibling?
+      if index_of_i_among_siblings == 0:
+        dependency['lsibling'].append(-1)
+      else:
+        dependency['lsibling'].append( dependency['children'][head][index_of_i_among_siblings-1] )
+      # last sibling?
+      if index_of_i_among_siblings == len(dependency['children'][head])-1 or head < 0:
+        dependency['rsibling'].append(-1)
+      else:
+        dependency['rsibling'].append( dependency['children'][head][index_of_i_among_siblings+1] )
+
     if not source==dependency['token']:
       #print source_line, dep_line, a_index, b_index, instance
       #print src
@@ -84,7 +106,6 @@ def main():
 
     response_file.write(u'{}\t{}\n'.format(instance,label))
 
-    sys.stdout.write('.')
     features = extract(source, clusters, a_index, b_index, dependency, True)
     feature_value_strings = [u'"{}": {}'.format(f.replace('"',"'"), features[f]) for f in features.keys()]
     feature_file.write(u'{}\t{{{}}}\n'.format(instance, ', '.join(feature_value_strings)))
@@ -95,30 +116,21 @@ def main():
   response_file.close()
   feature_file.close()
 
-def add_feature(features, new_feature, val, relation, add_relation=False):
-  features[new_feature] = val
-  features[new_feature[0]+relation+new_feature[1:]] = val
+#def add_feature(features, new_feature, val, relation, add_relation=False):
+#  features[new_feature] = val
+#  features[new_feature[0]+relation+new_feature[1:]] = val
   
-def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
+def extract(source, clusters, a_index, b_index, dependency, add_relation=True):
 
   features = dict()
 
-  # how does a relate to b? this will be conjoined to all the features at the end
-  if dependency['head'][a_index]==dependency['head'][b_index]:
-    relation = u'b=head(a)_'
-  elif dependency['head'][a_index]==b_index:
-    relation = u'a=head(b)_'
-  elif dependency['head'][b_index]==a_index:
-    relation = u'head(a)=head(b)_'
-  else:
-    assert False  
-
   # how large is the gap between a and b
   gap = b_index - a_index
+  gap_gt1 = '>' if gap > 1 else '='
 
-  # this is often conjoined with other features
-  gap_gt1 = '>' if abs(gap) == 1 else '='
-  
+  # level of a (b's level is a function of a's level and the relationship between them)
+  a_level = dependency['level'][a_index]
+
   # identity of a, b
   lexical = False
   if lexical:
@@ -126,55 +138,91 @@ def extract(source, clusters, a_index, b_index, dependency, add_relation=False):
     features[u'b={}_gap{}1'.format(source[b_index], gap_gt1)] = 1
 
   # brown clusters of a, b, and (a,b)
-  features[u'brown(a)={}_gap{}1'.format(clusters[a_index], gap_gt1)] = 1
-  features[u'brown(b)={}_gap{}1'.format(clusters[b_index], gap_gt1)] = 1
   features[u'brown(a)={}_brown(b)={}'.format(clusters[a_index], clusters[b_index])] = 1
 
   # fine POS tag of a, b, and (a,b)
-  features[u'fine(a)={}_gap{}1'.format(dependency['pos'][a_index], gap_gt1)] = 1
-  features[u'fine(b)={}_gap{}1'.format(dependency['pos'][b_index], gap_gt1)] = 1
-  features[u'fine(a)={}_fine(b)={}'.format(dependency['pos'][a_index], dependency['pos'][b_index])] = 1
+  features[u'fine(a)={}_fine(b)={}'.format(dependency['pos'][a_index], 
+                                           dependency['pos'][b_index])] = 1
+  features[u'level(a)={}_fine(a)={}_fine(b)={}'.format(a_level, dependency['pos'][a_index], 
+                                                       dependency['pos'][b_index])] = 1
 
   # coarse POS tag of a, b, and (a,b)
-  features[u'coarse(a)={}_gap{}1'.format(dependency['coarse'][a_index], gap_gt1)] = 1
-  features[u'coarse(b)={}_gap{}1'.format(dependency['coarse'][b_index], gap_gt1)] = 1
-  features[u'coarse(a)={}_coarse(b)={}'.format(dependency['coarse'][a_index], dependency['coarse'][b_index])] = 1
+  features[u'coarse(a)={}_coarse(b)={}'.format(dependency['coarse'][a_index], 
+                                               dependency['coarse'][b_index])] = 1
+  features[u'level(a)={}_coarse(a)={}_coarse(b)={}'.format(a_level, dependency['coarse'][a_index], 
+                                                           dependency['coarse'][b_index])] = 1
 
-  # number of children of a, b
-  features[u'fanout(a)={}_gap{}1'.format(dependency['fanout'][a_index], gap_gt1)] = 1
-  features[u'fanout(b)={}_gap{}1'.format(dependency['fanout'][b_index], gap_gt1)] = 1
-
-  # level of a (b's level is a function of a's level and the relationship between them)
-  features[u'level(a)={}'.format(dependency['level'][a_index])] = 1
-  
-  # dependency relations
-  features[u'mod(a)={}_coarse(a)={}'.format(dependency['mod'][a_index], dependency['coarse'][a_index])] = 1
-  features[u'mod(b)={}_coarse(b)={}'.format(dependency['mod'][b_index], dependency['coarse'][b_index])] = 1
+  # features specific to the relationship between a and b
   if dependency['head'][a_index]==dependency['head'][b_index]:
-    features[u'mod(a)={}_coarse(a)={}_mod(b)={}_coarse(b)={}'.format(dependency['mod'][a_index], dependency['coarse'][a_index], dependency['mod'][b_index], dependency['coarse'][b_index])] = 1
+    relation = u'head(a)=head(b)_'
+    features[u'fanout(head)={}_gap{}1'.format(dependency['fanout'][ dependency['head'][a_index] ], 
+                                                     gap_gt1)] = 1
+    features[u'mod(a)={}_fine(a)={}_mod(b)={}_fine(b)={}'.format(dependency['mod'][a_index], 
+                                                                     dependency['pos'][a_index], 
+                                                                     dependency['mod'][b_index], 
+                                                                     dependency['pos'][b_index])] = 1
+    head = dependency['head'][a_index]
+    features[u'fine(head)={}'.format(dependency['pos'][head])] = 1
+    head_left_sibling = dependency['lsibling'][head]
+    head_right_sibling = dependency['rsibling'][head]
+    if head_left_sibling >= 0:
+      features[u'fine(head)={}_fine(head_left_sibling)={}'.format(dependency['pos'][head],
+                                                                  dependency['pos'][head_left_sibling])]=1
+    if head_right_sibling >= 0:
+      features[u'fine(head)={}_fine(head_right_sibling)={}'.format(dependency['pos'][head],
+                                                                   dependency['pos'][head_right_sibling])]=1
+    
+    if dependency['lsibling'][a_index] == b_index:
+      features[u'contiguous_siblings'] = 1
+    else:
+      features[u'noncontiguous_siblings'] = 1
+      if dependency['lsibling'][a_index] == dependency['rsibling'][b_index]:
+        features[u'fine(a_right_sibling==b_left_sibling)={}'.format(dependency['rsibling'][a_index])]=1
+      else:
+        features[u'fine(a_right_sibling)={}_fine(b_left_sibling)={}'.format(dependency['rsibling'][a_index],
+                                                                            dependency['lsibling'][b_index])]=1
+    features[u'|head_children|={}'.format(len(dependency['children'][head]))] = 1
+
   elif dependency['head'][a_index]==b_index:
-    features[u'mod(a)={}_coarse(a)={}_coarse(b)={}'.format(dependency['mod'][a_index], dependency['coarse'][a_index], dependency['coarse'][b_index])] = 1
+    relation = u'b=head(a)_'
+    features[u'fanout(b)={}_gap{}1'.format(dependency['fanout'][b_index], gap_gt1)] = 1
+    features[u'mod(a)={}_fine(a)={}_fine(b)={}'.format(dependency['mod'][a_index], 
+                                                       dependency['pos'][a_index], 
+                                                       dependency['pos'][b_index])] = 1
+    b_left_sibling = dependency['lsibling'][b_index]
+    b_right_sibling = dependency['rsibling'][b_index]
+    features[u'fine(b_left_sibling)={}'.format(dependency['pos'][b_left_sibling])] = 1
+    features[u'fine(b_right_sibling)={}'.format(dependency['pos'][b_right_sibling])] = 1
+    features[u'|b_children|={}'.format(len(dependency['children'][b_index]))] = 1
   elif dependency['head'][b_index]==a_index:
-    features[u'mod(b)={}_coarse(a)={}_coarse(b)={}'.format(dependency['mod'][b_index], dependency['coarse'][a_index], dependency['coarse'][b_index])] = 1
+    relation = u'a=head(b)_'
+    features[u'fanout(a)={}_gap{}1'.format(dependency['fanout'][a_index], gap_gt1)] = 1
+    features[u'mod(b)={}_fine(a)={}_fine(b)={}'.format(dependency['mod'][b_index], 
+                                                       dependency['pos'][a_index], 
+                                                       dependency['pos'][b_index])] = 1             
+    a_left_sibling = dependency['lsibling'][a_index]
+    a_right_sibling = dependency['rsibling'][a_index]
+    features[u'fine(a_left_sibling)={}'.format(dependency['pos'][a_left_sibling])] = 1
+    features[u'fine(a_right_sibling)={}'.format(dependency['pos'][a_right_sibling])] = 1
+    features[u'|a_children|={}'.format(len(dependency['children'][a_index]))] = 1
+  else:
+    print 'a_index=', a_index, ', b_index=', b_index, ', dependency[head]=', dependency['head']
+    print source
+    assert False
 
-  # coarse pos ngram features. TODO: consider conjoining this with the signed gap between a and b
-  before_a = dependency['coarse'][a_index-1] if a_index > 0 else u'sos'
-  features[u'coarse(a-1)={}_coarse(a)={}'.format(before_a, dependency['coarse'][a_index])] = 1
-  before_b = dependency['coarse'][b_index-1] if b_index > 0 else u'sos'
-  features[u'coarse(b-1)={}_coarse(b)={}'.format(before_b, dependency['coarse'][b_index])] = 1
-  after_a = dependency['coarse'][a_index+1] if a_index < len(source)-1 else u'eos'
-  features[u'coarse(a)={}_coarse(a+1)={}'.format(dependency['coarse'][a_index], after_a)] = 1
-  after_b = dependency['coarse'][b_index+1] if b_index < len(source)-1 else u'eos'
-  features[u'coarse(b)={}_coarse(b+1)={}'.format(dependency['coarse'][b_index], after_b)] = 1
+  # fine pos ngram features
+  before_b = dependency['pos'][b_index-1] if b_index > 0 else u'sos'
+  after_a = dependency['pos'][a_index+1] if a_index < len(source)-1 else u'eos'
+  features[u'fine(a)={}_fine(a+1)={}_gap={}_fine(b-1)={}_fine(b)={}'.format(dependency['pos'][a_index],
+                                                                            after_a, gap, before_b,
+                                                                            dependency['pos'][b_index])] = 1
 
-  #if dependency['head'][a_index] < 0:
-  #  features[u'a_root'] = 1
-  #  b_parent = dependency['head'][b_index]
-  #  features[u'b_head_token_'+source[b_parent]] = 1
-  #  features[u'b_head_cluster_'+clusters[b_parent]] = 1
-  #  features[u'b_head_pos_'+   dependency['pos'][b_parent]] = 1
-  #  features[u'b_head_coarse_'+dependency['coarse'][b_parent]] = 1
-  #  features[u'b_head_mod_'+dependency['mod'][b_parent]] = 1
+  if dependency['head'][a_index] < 0:
+    features[u'root=a_mod(b)={}'.format(dependency['mod'][b_index])] = 1
+
+  if dependency['head'][b_index] < 0:
+    features[u'root=b_mod(a)={}'.format(dependency['mod'][a_index])] = 1           
+             
   #  if not dependency['head'][b_parent] < 0:
   #    b_grand = dependency['head'][b_parent]
   #    features[u'b_grandparent_token_'+source[b_grand]] = 1
