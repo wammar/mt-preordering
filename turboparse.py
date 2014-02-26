@@ -14,14 +14,10 @@ parser = None
 pos_map = dict()
 lemma_map = dict()
 unknown_tags = 0
-def start_parser(model=MODEL,parser_loc=PARSER, coarse='', lemma_filename=''):
+def start_parser(coarse='', lemma_filename=''):
     global lemma_map
     global pos_map
-    global parser
-    parser = sp.Popen([parser_loc+'/TurboParser', '--test', '--file_model='+model,
-        '--file_test=/dev/stdin', '--file_prediction=/dev/stdout'],
-        stdin=sp.PIPE, stdout=sp.PIPE)
-
+    
     # use coarse pos tag when available
     if coarse:
       fine2coarse = open(coarse)
@@ -31,20 +27,30 @@ def start_parser(model=MODEL,parser_loc=PARSER, coarse='', lemma_filename=''):
     
     # use lemmas when available
     if lemma_filename:
-      lemma_file = open(lemma)
+      lemma_file = open(lemma_filename)
       for line in lemma_file:
         splits = line.strip().split('\t')
         if len(splits) != 2:
           sys.stderr.write('warning: strange line found in '+ lemma +':\n'+ line)
           continue
         token, lemma = splits
-        lemma_map[token] = lemma
+        if lemma in lemma_map:
+          lemma_map[token] = token
+        else:
+          lemma_map[token] = lemma
 
 def parse(line):
     global parser
     global pos_map
     global unknown_tags
     global lemma_map
+    global args
+
+    if not parser:
+        parser = sp.Popen([args.turbo+'/TurboParser', '--test', '--file_model='+args.model,
+                           '--file_test=/dev/stdin', '--file_prediction=/dev/stdout'],
+                          stdin=sp.PIPE, stdout=sp.PIPE)
+        
     sentence, tagged = line[:-1].split(' ||| ')
     words = sentence.split()
     tags = tagged.split()
@@ -74,11 +80,13 @@ def parse(line):
     parsed = ' '.join('{}-{}'.format(head, mod) for head, mod in parse)
     return sentence, tagged, parsed, conll
 
+args = None
 def main():
+    global args
     arg_parser = argparse.ArgumentParser(description='Parse tagged sentences using TurboParser')
     arg_parser.add_argument('-j', '--jobs', type=int, default=1,
             help='number of instances of the parser to start')
-    arg_parser.add_argument('-c', '--chunk', type=int, default=100,
+    arg_parser.add_argument('-c', '--chunk', type=int, default=1,
             help='data chunk size')
     arg_parser.add_argument('-t','--turbo', help='turboparser location')
     arg_parser.add_argument('-m','--model',help='TurboParser model to use', required=False)
@@ -86,11 +94,12 @@ def main():
     arg_parser.add_argument('--lemma',help='token to lemma mapping',required=False)
     args = arg_parser.parse_args()
 
-    pool = mp.Pool(processes=args.jobs, initializer=start_parser(model=args.model,parser_loc=args.turbo, coarse=args.coarse, lemma=args.lemma))
+    pool = mp.Pool(processes=args.jobs, initializer=start_parser(coarse=args.coarse, lemma_filename=args.lemma))
 
-    for fields in pool.imap(parse, sys.stdin, chunksize=args.chunk):
+    for fields in pool.imap(parse, sys.stdin):
         if len(fields) != 4:
             print fields
+            assert False
         sentence, tagged, parsed, conll  = fields
         #print('{} ||| {} ||| {}'.format(sentence, tagged, parsed))
         print(conll)
